@@ -65,8 +65,8 @@ pub async fn create(
         }
 
         let image = Image::new(&data, content_type);
-        let exists = db
-            .image_exists(image.id.clone())
+        let exists = db.image
+            .exists(&image.id)
             .await?;
 
         if exists {
@@ -75,7 +75,7 @@ pub async fn create(
 
         upload(&image, data).await?;
 
-        db.image_insert(&image).await?;
+        db.image.insert(&image).await?;
 
         return Ok(image.id);
     }
@@ -84,20 +84,28 @@ pub async fn create(
 }
 
 #[derive(Deserialize)]
-pub struct QueryDelete {
+pub struct Delete {
     id: String,
 }
 
 pub async fn delete(
     _: Claims,
     State(db): State<Database>,
-    Query(query): Query<QueryDelete>,
+    Query(query): Query<Delete>,
 ) -> Result<String, Error> {
 
     let id = query.id;
 
-    db
-        .image_delete(id)
+    let exists = db.image
+        .exists(&id)
+        .await?;
+
+    if !exists {
+        return Err(Error::ImageNotFound);
+    }
+
+    db.image
+        .delete(&id)
         .await?;
 
     Ok(id)
