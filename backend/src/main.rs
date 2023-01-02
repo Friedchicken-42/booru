@@ -25,7 +25,9 @@ async fn main() -> Result<(), Error> {
                 .route("/login", post(routes::user::login))
                 .route(
                     "/image",
-                    post(routes::image::create).delete(routes::image::delete),
+                    post(routes::image::create)
+                        .delete(routes::image::delete)
+                        .get(routes::image::get),
                 ),
         )
         .with_state(db);

@@ -14,6 +14,7 @@ pub enum Error {
     ImageExists,
     ImageNotFound,
     Upload,
+    Serialize,
 }
 
 impl IntoResponse for Error {
@@ -29,6 +30,7 @@ impl IntoResponse for Error {
             Error::ImageExists => (StatusCode::BAD_REQUEST, "Image already exists"),
             Error::ImageNotFound => (StatusCode::BAD_REQUEST, "Image not found"),
             Error::Upload => (StatusCode::BAD_REQUEST, "Upload Error"),
+            Error::Serialize => (StatusCode::INTERNAL_SERVER_ERROR, "Serialize"),
         };
 
         let body = Json(json!({

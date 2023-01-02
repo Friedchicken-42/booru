@@ -82,6 +82,14 @@ impl Images {
 
         Ok(())
     }
+
+    pub async fn get(&self, id: &String) -> Result<Image, Error> {
+        self.collection
+            .find_one(doc! {"_id": id}, None)
+            .await
+            .map_err(|_| Error::DatabaseError)?
+            .ok_or_else(|| Error::ImageNotFound)
+    }
 }
 
 impl Database {
