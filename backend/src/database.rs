@@ -6,7 +6,7 @@ use mongodb::{
 
 use crate::{
     errors::Error,
-    models::{image::Image, user::User},
+    models::{image::Image, tag::Tag, user::User},
 };
 
 #[derive(Clone)]
@@ -20,10 +20,16 @@ pub struct Images {
 }
 
 #[derive(Clone)]
+pub struct Tags {
+    collection: mongodb::Collection<Tag>,
+}
+
+#[derive(Clone)]
 pub struct Database {
     client: Client,
     pub user: Users,
     pub image: Images,
+    pub tag: Tags,
 }
 
 impl Users {
@@ -54,17 +60,6 @@ impl Images {
         }
     }
 
-    pub async fn exists(&self, id: &String) -> Result<bool, Error> {
-        let filter = doc! {"_id": id};
-        let found = self
-            .collection
-            .find_one(filter, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
-
-        Ok(found.is_some())
-    }
-
     pub async fn insert(&self, image: &Image) -> Result<(), Error> {
         self.collection
             .insert_one(image, None)
@@ -83,12 +78,44 @@ impl Images {
         Ok(())
     }
 
-    pub async fn get(&self, id: &String) -> Result<Image, Error> {
+    pub async fn get(&self, id: &String) -> Result<Option<Image>, Error> {
         self.collection
             .find_one(doc! {"_id": id}, None)
             .await
-            .map_err(|_| Error::DatabaseError)?
-            .ok_or_else(|| Error::ImageNotFound)
+            .map_err(|_| Error::DatabaseError)
+    }
+}
+
+impl Tags {
+    fn new(db: &mongodb::Database) -> Tags {
+        Tags {
+            collection: db.collection::<Tag>("tags"),
+        }
+    }
+
+    pub async fn insert(&self, tag: &Tag) -> Result<(), Error> {
+        self.collection
+            .insert_one(tag, None)
+            .await
+            .map_err(|_| Error::DatabaseError)?;
+
+        Ok(())
+    }
+
+    pub async fn delete(&self, category: &String, name: &String) -> Result<(), Error> {
+        self.collection
+            .delete_one(doc! {"category": category, "name": name}, None)
+            .await
+            .map_err(|_| Error::DatabaseError)?;
+
+        Ok(())
+    }
+
+    pub async fn get(&self, category: &String, name: &String) -> Result<Option<Tag>, Error> {
+        self.collection
+            .find_one(doc! {"category": category, "name": name}, None)
+            .await
+            .map_err(|_| Error::DatabaseError)
     }
 }
 
@@ -105,11 +132,13 @@ impl Database {
         let db = client.database("booru");
         let user = Users::new(&db);
         let image = Images::new(&db);
+        let tag = Tags::new(&db);
 
         Ok(Database {
             client,
             user,
             image,
+            tag,
         })
     }
 

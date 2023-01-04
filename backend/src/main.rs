@@ -28,6 +28,10 @@ async fn main() -> Result<(), Error> {
                     post(routes::image::create)
                         .delete(routes::image::delete)
                         .get(routes::image::get),
+                )
+                .route(
+                    "/tag/",
+                    post(routes::tag::create).delete(routes::tag::delete),
                 ),
         )
         .with_state(db);
