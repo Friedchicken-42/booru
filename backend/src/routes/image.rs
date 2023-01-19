@@ -10,7 +10,15 @@ use reqwest::{
 };
 use serde::Deserialize;
 
-use crate::{database::Database, errors::Error, jwt::Claims, models::image::{Image, ImageResponse}};
+use crate::{
+    database::Database,
+    errors::Error,
+    jwt::Claims,
+    models::{
+        image::{Image, ImageResponse},
+        tag::TagResponse,
+    },
+};
 
 async fn upload(image: &Image, data: Bytes) -> Result<(), Error> {
     let part = Part::bytes(data.to_vec()).file_name(image.id.clone());
@@ -122,5 +130,33 @@ pub async fn get(
 
     let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
 
+    ImageResponse::from(image, &db).await
+}
+
+#[derive(Deserialize)]
+pub struct Update {
+    id: String,
+    tags: Vec<TagResponse>,
+}
+
+pub async fn update(
+    _: Claims,
+    State(db): State<Database>,
+    Json(query): Json<Update>,
+) -> Result<ImageResponse, Error> {
+    let id = query.id;
+
+    let mut tags = vec![];
+    for tag in query.tags {
+        let t = db
+            .tag
+            .search(&tag.category, &tag.name)
+            .await?
+            .ok_or(Error::TagNotFound)?;
+
+        tags.push(t);
+    }
+
+    let image = db.image.set(&id, tags).await?;
     ImageResponse::from(image, &db).await
 }

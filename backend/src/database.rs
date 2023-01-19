@@ -84,6 +84,21 @@ impl Images {
             .await
             .map_err(|_| Error::DatabaseError)
     }
+
+    pub async fn set(&self, id: &String, tags: Vec<Tag>) -> Result<Image, Error> {
+        let ids: Vec<ObjectId> = tags.iter().map(|t| t.id).collect();
+
+        self.collection
+            .update_one(doc! {"_id": id}, doc! {"$set": {"tags": ids}}, None)
+            .await
+            .map_err(|_| Error::DatabaseError)?;
+
+        match self.get(id).await {
+            Ok(Some(img)) => Ok(img),
+            Ok(None) => Err(Error::DatabaseError),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 impl Tags {
@@ -110,7 +125,6 @@ impl Tags {
 
         Ok(())
     }
-
 
     pub async fn get(&self, id: &ObjectId) -> Result<Tag, Error> {
         self.collection

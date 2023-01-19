@@ -27,13 +27,14 @@ async fn main() -> Result<(), Error> {
                     "/image",
                     post(routes::image::create)
                         .delete(routes::image::delete)
-                        .get(routes::image::get),
+                        .get(routes::image::get)
+                        .patch(routes::image::update),
                 )
                 .route(
                     "/tag",
                     post(routes::tag::create)
                         .delete(routes::tag::delete)
-                        .get(routes::tag::get),
+                        .get(routes::tag::get)
                 ),
         )
         .with_state(db);
@@ -52,8 +53,8 @@ async fn main() -> Result<(), Error> {
 
    [ ] post signup
    [-] post login
-   [x] post/delete/get image
-   [-] post/delete/get/put tag
+   [x] post/delete/get/patch image
+   [x] post/delete/get tag
    [ ] get search tag            (autocomplete)
    [ ] get search image          (search with tags)
      - get : search {include: [{name: a, category: b}], exclude: []}

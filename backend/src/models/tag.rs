@@ -16,7 +16,7 @@ pub struct Tag {
     pub description: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct TagResponse {
     pub name: String,
     pub category: String,
