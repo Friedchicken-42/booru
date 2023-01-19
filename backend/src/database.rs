@@ -111,7 +111,16 @@ impl Tags {
         Ok(())
     }
 
-    pub async fn get(&self, category: &String, name: &String) -> Result<Option<Tag>, Error> {
+
+    pub async fn get(&self, id: &ObjectId) -> Result<Tag, Error> {
+        self.collection
+            .find_one(doc! {"_id": id}, None)
+            .await
+            .map_err(|_| Error::DatabaseError)?
+            .ok_or(Error::TagNotFound)
+    }
+
+    pub async fn search(&self, category: &String, name: &String) -> Result<Option<Tag>, Error> {
         self.collection
             .find_one(doc! {"category": category, "name": name}, None)
             .await

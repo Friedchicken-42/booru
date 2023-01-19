@@ -10,7 +10,7 @@ use reqwest::{
 };
 use serde::Deserialize;
 
-use crate::{database::Database, errors::Error, jwt::Claims, models::image::Image};
+use crate::{database::Database, errors::Error, jwt::Claims, models::image::{Image, ImageResponse}};
 
 async fn upload(image: &Image, data: Bytes) -> Result<(), Error> {
     let part = Part::bytes(data.to_vec()).file_name(image.id.clone());
@@ -117,10 +117,10 @@ pub async fn get(
     _: Claims,
     State(db): State<Database>,
     Json(query): Json<Get>,
-) -> Result<Image, Error> {
+) -> Result<ImageResponse, Error> {
     let id = query.id;
 
-    let image = db.image.get(&id).await?;
+    let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
 
-    image.ok_or(Error::ImageNotFound)
+    ImageResponse::from(image, &db).await
 }

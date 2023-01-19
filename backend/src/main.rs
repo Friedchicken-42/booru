@@ -30,8 +30,10 @@ async fn main() -> Result<(), Error> {
                         .get(routes::image::get),
                 )
                 .route(
-                    "/tag/",
-                    post(routes::tag::create).delete(routes::tag::delete),
+                    "/tag",
+                    post(routes::tag::create)
+                        .delete(routes::tag::delete)
+                        .get(routes::tag::get),
                 ),
         )
         .with_state(db);
@@ -48,12 +50,12 @@ async fn main() -> Result<(), Error> {
 
 /* Routes
 
-    post signup
-    post login
-    post/delete/get image
-    post/delete/get/put tag
-    get search tag            (autocomplete)
-    get search image          (search with tags)
+   [ ] post signup
+   [-] post login
+   [x] post/delete/get image
+   [-] post/delete/get/put tag
+   [ ] get search tag            (autocomplete)
+   [ ] get search image          (search with tags)
      - get : search {include: [{name: a, category: b}], exclude: []}
 
     get image by id
