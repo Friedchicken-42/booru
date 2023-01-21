@@ -1,11 +1,12 @@
 use axum::{
+    async_trait,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use mongodb::bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::Error;
+use crate::{database::Database, errors::Error};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Tag {
@@ -16,7 +17,7 @@ pub struct Tag {
     pub description: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TagResponse {
     pub name: String,
     pub category: String,
@@ -36,17 +37,50 @@ impl Tag {
 }
 
 impl TagResponse {
-    pub fn from(tag: Tag) -> Self {
+    pub fn clean(self) -> Self {
         Self {
-            name: tag.name,
-            category: tag.category,
-            description: Some(tag.description),
+            name: self.name,
+            category: self.category,
+            description: None,
         }
     }
+}
 
-    pub fn clean(mut self) -> Self {
-        self.description = None;
-        self
+#[async_trait]
+pub trait Convert<T> {
+    async fn convert(self, db: &Database) -> Result<T, Error>;
+}
+
+#[async_trait]
+impl Convert<TagResponse> for Tag {
+    async fn convert(self, _: &Database) -> Result<TagResponse, Error> {
+        Ok(TagResponse {
+            name: self.name,
+            category: self.category,
+            description: Some(self.description),
+        })
+    }
+}
+
+#[async_trait]
+impl Convert<Tag> for TagResponse {
+    async fn convert(self, db: &Database) -> Result<Tag, Error> {
+        db.tag
+            .search(&self.category, &self.name)
+            .await?
+            .ok_or(Error::TagNotFound)
+    }
+}
+
+#[async_trait]
+impl Convert<Vec<Tag>> for Vec<TagResponse> {
+    async fn convert(self, db: &Database) -> Result<Vec<Tag>, Error> {
+        let mut tags = Vec::with_capacity(self.len());
+        for tag in self {
+            let t = tag.convert(db).await?;
+            tags.push(t);
+        }
+        Ok(tags)
     }
 }
 

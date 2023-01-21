@@ -4,7 +4,10 @@ mod jwt;
 mod models;
 mod routes;
 
-use axum::{routing::post, Router, Server};
+use axum::{
+    routing::{get, post},
+    Router, Server,
+};
 use database::Database;
 use dotenv::dotenv;
 use errors::Error;
@@ -34,8 +37,10 @@ async fn main() -> Result<(), Error> {
                     "/tag",
                     post(routes::tag::create)
                         .delete(routes::tag::delete)
-                        .get(routes::tag::get)
-                ),
+                        .get(routes::tag::get),
+                )
+                .route("/search/image", get(routes::search::image))
+                // .route("/search/tag", get(routes::search::tag))
         )
         .with_state(db);
 

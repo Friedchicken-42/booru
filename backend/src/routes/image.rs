@@ -16,7 +16,7 @@ use crate::{
     jwt::Claims,
     models::{
         image::{Image, ImageResponse},
-        tag::TagResponse,
+        tag::{TagResponse, Convert},
     },
 };
 
@@ -130,7 +130,7 @@ pub async fn get(
 
     let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
 
-    ImageResponse::from(image, &db).await
+    image.convert(&db).await
 }
 
 #[derive(Deserialize)]
@@ -146,17 +146,8 @@ pub async fn update(
 ) -> Result<ImageResponse, Error> {
     let id = query.id;
 
-    let mut tags = vec![];
-    for tag in query.tags {
-        let t = db
-            .tag
-            .search(&tag.category, &tag.name)
-            .await?
-            .ok_or(Error::TagNotFound)?;
-
-        tags.push(t);
-    }
+    let tags = query.tags.convert(&db).await?;
 
     let image = db.image.set(&id, tags).await?;
-    ImageResponse::from(image, &db).await
+    image.convert(&db).await
 }

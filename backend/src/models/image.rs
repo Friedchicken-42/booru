@@ -1,12 +1,14 @@
 use axum::{
     body::Bytes,
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Response}, async_trait,
 };
 use mongodb::bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 
 use crate::{database::Database, errors::Error, models::tag::TagResponse};
+
+use super::tag::Convert;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Image {
@@ -34,19 +36,15 @@ impl Image {
     }
 }
 
-impl ImageResponse {
-    pub async fn from(image: Image, db: &Database) -> Result<Self, Error> {
-        let url = format!("http://localhost:4000/{}", image.id);
+#[async_trait]
+impl Convert<ImageResponse> for Image {
+    async fn convert(self, db: &Database) -> Result<ImageResponse, Error> {
+        let url = format!("http://localhost:4000/{}", self.id);
 
-        let mut tags = vec![];
-        for id in image.tags {
-            let tag = db
-                .tag
-                .get(&id)
-                .await
-                .map(TagResponse::from)?
-                .clean();
-
+        let mut tags = Vec::with_capacity(self.tags.len());
+        for id in self.tags {
+            let tag = db.tag.get(&id).await?;
+            let tag = tag.convert(db).await?;
             tags.push(tag);
         }
 

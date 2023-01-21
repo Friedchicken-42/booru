@@ -5,7 +5,7 @@ use crate::{
     database::Database,
     errors::Error,
     jwt::Claims,
-    models::tag::{Tag, TagResponse},
+    models::tag::{Tag, TagResponse, Convert},
 };
 
 #[derive(Deserialize)]
@@ -24,7 +24,7 @@ pub async fn create(
 
     db.tag.insert(&tag).await?;
 
-    Ok(TagResponse::from(tag).clean())
+    Ok(tag.convert(&db).await?.clean())
 }
 
 #[derive(Deserialize)]
@@ -46,7 +46,7 @@ pub async fn delete(
 
     db.tag.delete(&tag.category, &tag.name).await?;
 
-    Ok(TagResponse::from(tag).clean())
+    Ok(tag.convert(&db).await?.clean())
 }
 
 #[derive(Deserialize)]
@@ -66,5 +66,5 @@ pub async fn get(
         .await?
         .ok_or(Error::TagNotFound)?;
 
-    Ok(TagResponse::from(tag))
+    tag.convert(&db).await
 }
