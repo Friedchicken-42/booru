@@ -13,7 +13,8 @@ use super::tag::Convert;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Image {
     #[serde(rename = "_id")]
-    pub id: String,
+    pub id: ObjectId,
+    pub hash: String,
     pub content_type: String,
     pub tags: Vec<ObjectId>,
 }
@@ -26,10 +27,11 @@ pub struct ImageResponse {
 
 impl Image {
     pub fn new(data: &Bytes, content_type: String) -> Image {
-        let id = format!("{:x}", md5::compute(data));
+        let hash = format!("{:x}", md5::compute(data));
 
         Image {
-            id,
+            id: ObjectId::new(),
+            hash,
             content_type,
             tags: vec![],
         }

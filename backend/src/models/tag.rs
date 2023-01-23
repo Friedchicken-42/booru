@@ -66,21 +66,9 @@ impl Convert<TagResponse> for Tag {
 impl Convert<Tag> for TagResponse {
     async fn convert(self, db: &Database) -> Result<Tag, Error> {
         db.tag
-            .search(&self.category, &self.name)
+            .find(&self.category, &self.name)
             .await?
             .ok_or(Error::TagNotFound)
-    }
-}
-
-#[async_trait]
-impl Convert<Vec<Tag>> for Vec<TagResponse> {
-    async fn convert(self, db: &Database) -> Result<Vec<Tag>, Error> {
-        let mut tags = Vec::with_capacity(self.len());
-        for tag in self {
-            let t = tag.convert(db).await?;
-            tags.push(t);
-        }
-        Ok(tags)
     }
 }
 

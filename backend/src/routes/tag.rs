@@ -38,7 +38,7 @@ pub async fn delete(
     State(db): State<Database>,
     Json(query): Json<Delete>,
 ) -> Result<TagResponse, Error> {
-    let option = db.tag.search(&query.category, &query.name).await?;
+    let option = db.tag.find(&query.category, &query.name).await?;
 
     let Some(tag) = option else {
         return Err(Error::TagNotFound);
@@ -62,7 +62,7 @@ pub async fn get(
 ) -> Result<TagResponse, Error> {
     let tag = db
         .tag
-        .search(&query.category, &query.name)
+        .find(&query.category, &query.name)
         .await?
         .ok_or(Error::TagNotFound)?;
 

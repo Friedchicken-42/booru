@@ -54,7 +54,7 @@ where
             .await
             .map_err(|_| Error::InvalidToken)?;
 
-        Claims::decode(bearer.token().to_string())
+        Claims::decode(bearer.token())
     }
 }
 
@@ -77,8 +77,8 @@ impl Claims {
         })
     }
 
-    pub fn decode(token: String) -> Result<Claims, Error> {
-        let claims = decode::<Claims>(token.as_str(), &KEYS.decoding, &Validation::default())
+    pub fn decode(token: &str) -> Result<Claims, Error> {
+        let claims = decode::<Claims>(token, &KEYS.decoding, &Validation::default())
             .map_err(|_| Error::InvalidToken)?
             .claims;
 

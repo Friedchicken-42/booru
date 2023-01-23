@@ -4,12 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.dev]
+incremental = true
 
 [dependencies]
 axum = { version = "0.6.1", features = ["headers", "multipart"] }
 axum-macros = "0.3.0"
 chrono = "0.4.23"
 dotenv = "0.15.0"
+futures = "0.3.25"
 jsonwebtoken = "8.2.0"
 md5 = "0.7.0"
 mongodb = { version = "2.3.1", features = ["tokio-runtime"] }

@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use axum_macros::debug_handler;
+use futures::future::try_join_all;
 use reqwest::{
     multipart::{Form, Part},
     Client,
@@ -16,12 +17,12 @@ use crate::{
     jwt::Claims,
     models::{
         image::{Image, ImageResponse},
-        tag::{TagResponse, Convert},
+        tag::{Convert, TagResponse},
     },
 };
 
 async fn upload(image: &Image, data: Bytes) -> Result<(), Error> {
-    let part = Part::bytes(data.to_vec()).file_name(image.id.clone());
+    let part = Part::bytes(data.to_vec()).file_name(image.hash.clone());
 
     let multipart = Form::new().part("file", part);
 
@@ -67,16 +68,18 @@ pub async fn create(
     mut multipart: Multipart,
 ) -> Result<String, Error> {
     while let Ok(Some(field)) = multipart.next_field().await {
+        println!("{field:?}");
         let Some((name, _, content_type, data)) = parse_field(field).await else {
             continue;
         };
+        println!("{name:?}");
 
         if name != "image" {
             continue;
         }
 
         let image = Image::new(&data, content_type);
-        let option = db.image.get(&image.id).await?;
+        let option = db.image.get(&image.hash).await?;
 
         if option.is_some() {
             return Err(Error::ImageExists);
@@ -86,7 +89,7 @@ pub async fn create(
 
         db.image.insert(&image).await?;
 
-        return Ok(image.id);
+        return Ok(image.hash);
     }
 
     Err(Error::MissingField)
@@ -102,17 +105,17 @@ pub async fn delete(
     State(db): State<Database>,
     Json(query): Json<Delete>,
 ) -> Result<String, Error> {
-    let id = query.id;
+    let hash = query.id;
 
-    let option = db.image.get(&id).await?;
+    let option = db.image.get(&hash).await?;
 
     if option.is_none() {
         return Err(Error::ImageNotFound);
     }
 
-    db.image.delete(&id).await?;
+    db.image.delete(&hash).await?;
 
-    Ok(id)
+    Ok(hash)
 }
 
 #[derive(Deserialize)]
@@ -126,9 +129,9 @@ pub async fn get(
     State(db): State<Database>,
     Json(query): Json<Get>,
 ) -> Result<ImageResponse, Error> {
-    let id = query.id;
+    let hash = query.id;
 
-    let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
+    let image = db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?;
 
     image.convert(&db).await
 }
@@ -146,7 +149,7 @@ pub async fn update(
 ) -> Result<ImageResponse, Error> {
     let id = query.id;
 
-    let tags = query.tags.convert(&db).await?;
+    let tags = try_join_all(query.tags.into_iter().map(|t| t.convert(&db))).await?;
 
     let image = db.image.set(&id, tags).await?;
     image.convert(&db).await

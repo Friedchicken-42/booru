@@ -78,9 +78,9 @@ impl Images {
         Ok(())
     }
 
-    pub async fn get(&self, id: &String) -> Result<Option<Image>, Error> {
+    pub async fn get(&self, hash: &String) -> Result<Option<Image>, Error> {
         self.collection
-            .find_one(doc! {"_id": id}, None)
+            .find_one(doc! {"hash": hash}, None)
             .await
             .map_err(|_| Error::DatabaseError)
     }
@@ -98,6 +98,17 @@ impl Images {
             Ok(None) => Err(Error::DatabaseError),
             Err(e) => Err(e),
         }
+    }
+
+    pub async fn search(
+        &self,
+        include: Vec<Tag>,
+        exclude: Vec<Tag>,
+        previous: Option<ObjectId>,
+    ) -> Result<Vec<Image>, Error> {
+        println!("{include:?} {exclude:?} {previous:?}");
+
+        Err(Error::ImageNotFound)
     }
 }
 
@@ -134,7 +145,7 @@ impl Tags {
             .ok_or(Error::TagNotFound)
     }
 
-    pub async fn search(&self, category: &String, name: &String) -> Result<Option<Tag>, Error> {
+    pub async fn find(&self, category: &String, name: &String) -> Result<Option<Tag>, Error> {
         self.collection
             .find_one(doc! {"category": category, "name": name}, None)
             .await
