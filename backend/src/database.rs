@@ -1,8 +1,10 @@
+use futures::StreamExt;
 use mongodb::{
-    bson::{doc, oid::ObjectId, DateTime},
+    bson::{self, doc, oid::ObjectId, DateTime},
     options::ClientOptions,
     Client,
 };
+use uuid::Uuid;
 
 use crate::{
     errors::Error,
@@ -69,7 +71,7 @@ impl Images {
         Ok(())
     }
 
-    pub async fn delete(&self, id: &String) -> Result<(), Error> {
+    pub async fn delete(&self, id: &Uuid) -> Result<(), Error> {
         self.collection
             .delete_one(doc! {"_id": id}, None)
             .await
@@ -78,14 +80,14 @@ impl Images {
         Ok(())
     }
 
-    pub async fn get(&self, hash: &String) -> Result<Option<Image>, Error> {
+    pub async fn get(&self, id: &Uuid) -> Result<Option<Image>, Error> {
         self.collection
-            .find_one(doc! {"hash": hash}, None)
+            .find_one(doc! {"_id": id}, None)
             .await
             .map_err(|_| Error::DatabaseError)
     }
 
-    pub async fn set(&self, id: &String, tags: Vec<Tag>) -> Result<Image, Error> {
+    pub async fn set(&self, id: &Uuid, tags: Vec<Tag>) -> Result<Image, Error> {
         let ids: Vec<ObjectId> = tags.iter().map(|t| t.id).collect();
 
         self.collection
@@ -93,22 +95,47 @@ impl Images {
             .await
             .map_err(|_| Error::DatabaseError)?;
 
-        match self.get(id).await {
-            Ok(Some(img)) => Ok(img),
-            Ok(None) => Err(Error::DatabaseError),
-            Err(e) => Err(e),
-        }
+        self.get(id).await?.ok_or(Error::DatabaseError)
     }
 
     pub async fn search(
         &self,
         include: Vec<Tag>,
         exclude: Vec<Tag>,
-        previous: Option<ObjectId>,
+        previous: Option<Uuid>,
     ) -> Result<Vec<Image>, Error> {
         println!("{include:?} {exclude:?} {previous:?}");
+        let limit: u32 = 5;
 
-        Err(Error::ImageNotFound)
+        let mut pipeline = vec![];
+
+        if let Some(prev) = previous {
+            pipeline.push(doc! {
+                "$match": {
+                    "_id": { "$lt": prev }
+                }
+            });
+        }
+
+        pipeline.append(&mut vec![
+            doc! { "$sort": { "created_at": -1 } },
+            doc! { "$limit": limit },
+        ]);
+
+        let mut cursor = self
+            .collection
+            .aggregate(pipeline, None)
+            .await
+            .map_err(|_| Error::DatabaseError)?;
+
+        let mut images = Vec::with_capacity(limit as usize);
+        while let Some(document) = cursor.next().await {
+            let document = document.map_err(|_| Error::DatabaseError)?;
+            let image = bson::from_document(document).map_err(|_| Error::DatabaseError)?;
+            images.push(image);
+        }
+
+        Ok(images)
     }
 }
 

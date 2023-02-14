@@ -2,6 +2,7 @@ use axum::{extract::State, Json};
 use axum_macros::debug_handler;
 use futures::future::try_join_all;
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
     database::Database,
@@ -19,6 +20,7 @@ pub struct SearchImage {
     include: Vec<TagResponse>,
     #[serde(default)]
     exclude: Vec<TagResponse>,
+    #[serde(default)]
     previous: Option<String>,
 }
 
@@ -38,7 +40,8 @@ pub async fn image(
 
     let previous = match query.previous {
         Some(hash) => {
-            let image = db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?;
+            let id = Uuid::parse_str(&hash).map_err(|_| Error::InvalidId)?;
+            let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
             Some(image.id)
         }
         None => None,

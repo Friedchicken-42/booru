@@ -10,6 +10,7 @@ use reqwest::{
     Client,
 };
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
     database::Database,
@@ -22,7 +23,7 @@ use crate::{
 };
 
 async fn upload(image: &Image, data: Bytes) -> Result<(), Error> {
-    let part = Part::bytes(data.to_vec()).file_name(image.hash.clone());
+    let part = Part::bytes(data.to_vec()).file_name(image.id.to_string());
 
     let multipart = Form::new().part("file", part);
 
@@ -67,19 +68,18 @@ pub async fn create(
     State(db): State<Database>,
     mut multipart: Multipart,
 ) -> Result<String, Error> {
+    // fix large image
     while let Ok(Some(field)) = multipart.next_field().await {
-        println!("{field:?}");
         let Some((name, _, content_type, data)) = parse_field(field).await else {
             continue;
         };
-        println!("{name:?}");
 
         if name != "image" {
             continue;
         }
 
         let image = Image::new(&data, content_type);
-        let option = db.image.get(&image.hash).await?;
+        let option = db.image.get(&image.id).await?;
 
         if option.is_some() {
             return Err(Error::ImageExists);
@@ -89,7 +89,7 @@ pub async fn create(
 
         db.image.insert(&image).await?;
 
-        return Ok(image.hash);
+        return Ok(image.id.simple().to_string());
     }
 
     Err(Error::MissingField)
@@ -105,17 +105,17 @@ pub async fn delete(
     State(db): State<Database>,
     Json(query): Json<Delete>,
 ) -> Result<String, Error> {
-    let hash = query.id;
+    let id = Uuid::parse_str(&query.id).map_err(|_| Error::InvalidId)?;
 
-    let option = db.image.get(&hash).await?;
+    let option = db.image.get(&id).await?;
 
     if option.is_none() {
         return Err(Error::ImageNotFound);
     }
 
-    db.image.delete(&hash).await?;
+    db.image.delete(&id).await?;
 
-    Ok(hash)
+    Ok(id.simple().to_string())
 }
 
 #[derive(Deserialize)]
@@ -129,9 +129,9 @@ pub async fn get(
     State(db): State<Database>,
     Json(query): Json<Get>,
 ) -> Result<ImageResponse, Error> {
-    let hash = query.id;
+    let id = Uuid::parse_str(&query.id).map_err(|_| Error::InvalidId)?;
 
-    let image = db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?;
+    let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
 
     image.convert(&db).await
 }
@@ -147,7 +147,7 @@ pub async fn update(
     State(db): State<Database>,
     Json(query): Json<Update>,
 ) -> Result<ImageResponse, Error> {
-    let id = query.id;
+    let id = Uuid::parse_str(&query.id).map_err(|_| Error::InvalidId)?;
 
     let tags = try_join_all(query.tags.into_iter().map(|t| t.convert(&db))).await?;
 

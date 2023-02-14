@@ -1,10 +1,13 @@
 use axum::{
+    async_trait,
     body::Bytes,
     http::StatusCode,
-    response::{IntoResponse, Response}, async_trait,
+    response::{IntoResponse, Response},
 };
-use mongodb::bson::oid::ObjectId;
+use bson::serde_helpers::uuid_1_as_binary;
+use mongodb::bson::{oid::ObjectId, DateTime};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{database::Database, errors::Error, models::tag::TagResponse};
 
@@ -13,27 +16,30 @@ use super::tag::Convert;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Image {
     #[serde(rename = "_id")]
-    pub id: ObjectId,
-    pub hash: String,
+    #[serde(with = "uuid_1_as_binary")]
+    pub id: Uuid,
     pub content_type: String,
     pub tags: Vec<ObjectId>,
+    pub created_at: DateTime,
 }
 
 #[derive(Serialize)]
 pub struct ImageResponse {
+    pub id: String,
     pub url: String,
     pub tags: Vec<TagResponse>,
+    pub created_at: DateTime,
 }
 
 impl Image {
     pub fn new(data: &Bytes, content_type: String) -> Image {
-        let hash = format!("{:x}", md5::compute(data));
+        let hash = Uuid::from_bytes(md5::compute(data).0);
 
         Image {
-            id: ObjectId::new(),
-            hash,
+            id: hash,
             content_type,
             tags: vec![],
+            created_at: DateTime::now(),
         }
     }
 }
@@ -50,7 +56,12 @@ impl Convert<ImageResponse> for Image {
             tags.push(tag);
         }
 
-        Ok(ImageResponse { url, tags })
+        Ok(ImageResponse {
+            id: self.id.to_string(),
+            url,
+            tags,
+            created_at: self.created_at,
+        })
     }
 }
 

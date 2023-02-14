@@ -16,6 +16,7 @@ pub enum Error {
     TagNotFound,
     Upload,
     Serialize,
+    InvalidId,
 }
 
 impl IntoResponse for Error {
@@ -34,6 +35,7 @@ impl IntoResponse for Error {
             Error::TagNotFound => (StatusCode::BAD_REQUEST, "Tag not found"),
             Error::Upload => (StatusCode::BAD_REQUEST, "Upload Error"),
             Error::Serialize => (StatusCode::INTERNAL_SERVER_ERROR, "Serialize"),
+            Error::InvalidId => (StatusCode::BAD_REQUEST, "Invalid Id"),
         };
 
         let body = Json(json!({
