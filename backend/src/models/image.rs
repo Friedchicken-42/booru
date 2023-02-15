@@ -28,7 +28,7 @@ pub struct ImageResponse {
     pub id: String,
     pub url: String,
     pub tags: Vec<TagResponse>,
-    pub created_at: DateTime,
+    pub created_at: String,
 }
 
 impl Image {
@@ -47,7 +47,8 @@ impl Image {
 #[async_trait]
 impl Convert<ImageResponse> for Image {
     async fn convert(self, db: &Database) -> Result<ImageResponse, Error> {
-        let url = format!("http://localhost:4000/{}", self.id);
+        let hash = self.id.simple().to_string();
+        let url = format!("http://localhost:4000/{}", hash);
 
         let mut tags = Vec::with_capacity(self.tags.len());
         for id in self.tags {
@@ -56,11 +57,16 @@ impl Convert<ImageResponse> for Image {
             tags.push(tag);
         }
 
+        let timestamp = self
+            .created_at
+            .try_to_rfc3339_string()
+            .map_err(|_| Error::Serialize)?;
+
         Ok(ImageResponse {
-            id: self.id.to_string(),
+            id: hash,
             url,
             tags,
-            created_at: self.created_at,
+            created_at: timestamp,
         })
     }
 }

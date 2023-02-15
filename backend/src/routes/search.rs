@@ -42,7 +42,7 @@ pub async fn image(
         Some(hash) => {
             let id = Uuid::parse_str(&hash).map_err(|_| Error::InvalidId)?;
             let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
-            Some(image.id)
+            Some(image)
         }
         None => None,
     };

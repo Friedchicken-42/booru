@@ -102,25 +102,51 @@ impl Images {
         &self,
         include: Vec<Tag>,
         exclude: Vec<Tag>,
-        previous: Option<Uuid>,
+        previous: Option<Image>,
     ) -> Result<Vec<Image>, Error> {
         println!("{include:?} {exclude:?} {previous:?}");
         let limit: u32 = 5;
 
         let mut pipeline = vec![];
 
-        if let Some(prev) = previous {
-            pipeline.push(doc! {
+        let include: Vec<ObjectId> = include.iter().map(|t| t.id).collect();
+        let exclude: Vec<ObjectId> = exclude.iter().map(|t| t.id).collect();
+
+        if include.len() > 0 {
+            pipeline.append(&mut vec![doc! {
                 "$match": {
-                    "_id": { "$lt": prev }
+                    "tags": {
+                        "$in": include
+                    }
                 }
-            });
+            }]);
+        }
+
+        if exclude.len() > 0 {
+            pipeline.append(&mut vec![doc! {
+                "$match": {
+                    "tags": {
+                        "$not": {
+                            "$in": exclude
+                        }
+                    }
+                }
+            }]);
         }
 
         pipeline.append(&mut vec![
             doc! { "$sort": { "created_at": -1 } },
             doc! { "$limit": limit },
         ]);
+
+        if let Some(prev) = previous {
+            pipeline.push(doc! {
+                "$match": {
+                    "created_at": { "$lt": prev.created_at }
+                }
+            });
+        }
+
 
         let mut cursor = self
             .collection
