@@ -5,13 +5,15 @@ mod models;
 mod routes;
 
 use axum::{
-    routing::{get, post},
+    routing::post,
     Router, Server,
 };
 use database::Database;
 use dotenv::dotenv;
 use errors::Error;
 use std::{env, net::SocketAddr};
+
+use tower_http::cors::CorsLayer;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -39,12 +41,13 @@ async fn main() -> Result<(), Error> {
                         .delete(routes::tag::delete)
                         .get(routes::tag::get),
                 )
-                .route("/search/image", get(routes::search::image))
-                // .route("/search/tag", get(routes::search::tag))
+                .route("/search/image", post(routes::search::image))
+                // .route("/search/tag", post(routes::search::tag))
         )
+        .layer(CorsLayer::very_permissive())
         .with_state(db);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 5000));
 
     Server::bind(&addr)
         .serve(app.into_make_service())
@@ -60,12 +63,14 @@ async fn main() -> Result<(), Error> {
    [-] post login
    [x] post/delete/get/patch image
    [x] post/delete/get tag
-   [ ] get search tag            (autocomplete)
-   [ ] get search image          (search with tags)
-     - get : search {include: [{name: a, category: b}], exclude: []}
+   [ ] post search tag            (autocomplete)
+   [x] post search image          (search with tags)
+     - post: search {include: [{name: a, category: b}], exclude: []}
 
     get image by id
      - get : /image/:id
      - get : /image?id
+
+    TODO: Should fix get requests w/ json 
 
 */
