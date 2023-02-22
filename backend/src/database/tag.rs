@@ -1,4 +1,5 @@
 use bson::{doc, oid::ObjectId};
+use mongodb::ClientSession;
 
 use crate::{models::tag::Tag, errors::Error};
 
@@ -49,24 +50,26 @@ impl Tags {
             .map_err(|_| Error::DatabaseError)
     }
 
-    pub async fn increment(&self, id: &ObjectId) -> Result<(), Error> {
+    pub async fn increment(&self, id: &ObjectId, session: &mut ClientSession) -> Result<(), Error> {
         self.collection
-            .update_one(
+            .update_one_with_session(
                 doc! {"_id": id },
                 doc! {"$inc": { "count": 1 } },
-                None
+                None,
+                session,
             ).await
             .map_err(|_| Error::DatabaseError)?;
 
         Ok(())
     }
 
-    pub async fn decrement(&self, id: &ObjectId) -> Result<(), Error> {
+    pub async fn decrement(&self, id: &ObjectId, session: &mut ClientSession) -> Result<(), Error> {
         self.collection
-            .update_one(
+            .update_one_with_session(
                 doc! {"_id": id },
                 doc! {"$inc": { "count": -1 } },
-                None
+                None,
+                session,
             ).await
             .map_err(|_| Error::DatabaseError)?;
 

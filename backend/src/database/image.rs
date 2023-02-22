@@ -71,18 +71,18 @@ impl Images {
 
         for id in &ids {
             if !image.tags.contains(id) {
-                tag_coll.increment(id).await?;
+                tag_coll.increment(id, &mut session).await?;
             }
         }
 
         for tag in image.tags {
             if !ids.contains(&tag) {
-                tag_coll.decrement(&tag).await?;
+                tag_coll.decrement(&tag, &mut session).await?;
             }
         }
 
         self.collection
-            .update_one(doc! {"_id": id}, doc! {"$set": {"tags": ids}}, None)
+            .update_one_with_session(doc! {"_id": id}, doc! {"$set": {"tags": ids}}, None, &mut session)
             .await
             .map_err(|_| Error::DatabaseError)?;
 
