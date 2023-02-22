@@ -152,6 +152,6 @@ pub async fn update(
 
     let tags = try_join_all(query.tags.into_iter().map(|t| t.convert(&db))).await?;
 
-    let image = db.image.set(&id, tags).await?;
+    let image = db.image.set(&id, tags, &db.tag).await?;
     image.convert(&db).await
 }

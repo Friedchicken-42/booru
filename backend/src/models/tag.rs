@@ -15,6 +15,7 @@ pub struct Tag {
     pub name: String,
     pub category: String,
     pub description: String,
+    pub count: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,6 +24,8 @@ pub struct TagResponse {
     pub category: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(default)]
+    pub count: u32,
 }
 
 impl Tag {
@@ -32,6 +35,7 @@ impl Tag {
             name,
             category,
             description,
+            count: 0,
         }
     }
 }
@@ -42,6 +46,7 @@ impl TagResponse {
             name: self.name,
             category: self.category,
             description: None,
+            count: self.count,
         }
     }
 }
@@ -58,6 +63,7 @@ impl Convert<TagResponse> for Tag {
             name: self.name,
             category: self.category,
             description: Some(self.description),
+            count: self.count,
         })
     }
 }

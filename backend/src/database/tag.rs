@@ -5,12 +5,14 @@ use crate::{models::tag::Tag, errors::Error};
 #[derive(Clone)]
 pub struct Tags {
     collection: mongodb::Collection<Tag>,
+    client: mongodb::Client,
 }
 
 impl Tags {
-    pub fn new(db: &mongodb::Database) -> Tags {
+    pub fn new(db: &mongodb::Database, client: mongodb::Client) -> Tags {
         Tags {
             collection: db.collection::<Tag>("tags"),
+            client,
         }
     }
 
@@ -45,5 +47,29 @@ impl Tags {
             .find_one(doc! {"category": category, "name": name}, None)
             .await
             .map_err(|_| Error::DatabaseError)
+    }
+
+    pub async fn increment(&self, id: &ObjectId) -> Result<(), Error> {
+        self.collection
+            .update_one(
+                doc! {"_id": id },
+                doc! {"$inc": { "count": 1 } },
+                None
+            ).await
+            .map_err(|_| Error::DatabaseError)?;
+
+        Ok(())
+    }
+
+    pub async fn decrement(&self, id: &ObjectId) -> Result<(), Error> {
+        self.collection
+            .update_one(
+                doc! {"_id": id },
+                doc! {"$inc": { "count": -1 } },
+                None
+            ).await
+            .map_err(|_| Error::DatabaseError)?;
+
+        Ok(())
     }
 }

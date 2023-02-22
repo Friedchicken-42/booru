@@ -2,17 +2,24 @@ use bson::{doc, oid::ObjectId};
 use futures::StreamExt;
 use uuid::Uuid;
 
-use crate::{models::{image::Image, tag::Tag}, errors::Error};
+use crate::{
+    errors::Error,
+    models::{image::Image, tag::Tag},
+};
+
+use super::tag::Tags;
 
 #[derive(Clone)]
 pub struct Images {
     collection: mongodb::Collection<Image>,
+    client: mongodb::Client,
 }
 
 impl Images {
-    pub fn new(db: &mongodb::Database) -> Images {
+    pub fn new(db: &mongodb::Database, client: mongodb::Client) -> Images {
         Images {
             collection: db.collection::<Image>("images"),
+            client,
         }
     }
 
@@ -41,13 +48,48 @@ impl Images {
             .map_err(|_| Error::DatabaseError)
     }
 
-    pub async fn set(&self, id: &Uuid, tags: Vec<Tag>) -> Result<Image, Error> {
-        let ids: Vec<ObjectId> = tags.iter().map(|t| t.id).collect();
+    pub async fn set(
+        &self,
+        id: &Uuid,
+        tag_list: Vec<Tag>,
+        tag_coll: &Tags,
+    ) -> Result<Image, Error> {
+        let mut session = self
+            .client
+            .start_session(None)
+            .await
+            .map_err(|_| Error::SessionCreate)?;
+
+        session
+            .start_transaction(None)
+            .await
+            .map_err(|_| Error::SessionCreate)?;
+
+        let image = self.get(id).await?.ok_or(Error::ImageNotFound)?;
+
+        let ids: Vec<ObjectId> = tag_list.iter().map(|t| t.id).collect();
+
+        for id in &ids {
+            if !image.tags.contains(id) {
+                tag_coll.increment(id).await?;
+            }
+        }
+
+        for tag in image.tags {
+            if !ids.contains(&tag) {
+                tag_coll.decrement(&tag).await?;
+            }
+        }
 
         self.collection
             .update_one(doc! {"_id": id}, doc! {"$set": {"tags": ids}}, None)
             .await
             .map_err(|_| Error::DatabaseError)?;
+
+        session
+            .commit_transaction()
+            .await
+            .map_err(|_| Error::SessionCommit)?;
 
         self.get(id).await?.ok_or(Error::DatabaseError)
     }
@@ -100,7 +142,6 @@ impl Images {
                 }
             });
         }
-
 
         let mut cursor = self
             .collection

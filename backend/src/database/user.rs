@@ -5,12 +5,14 @@ use crate::{models::user::User, errors::Error};
 #[derive(Clone)]
 pub struct Users {
     collection: mongodb::Collection<User>,
+    client: mongodb::Client,
 }
 
 impl Users {
-    pub fn new(db: &mongodb::Database) -> Users {
+    pub fn new(db: &mongodb::Database, client: mongodb::Client) -> Users {
         Users {
             collection: db.collection::<User>("users"),
+            client,
         }
     }
 

@@ -27,9 +27,9 @@ impl Database {
         let client = Client::with_options(options).map_err(|_| Error::DatabaseConnection)?;
 
         let db = client.database("booru");
-        let user = Users::new(&db);
-        let image = Images::new(&db);
-        let tag = Tags::new(&db);
+        let user = Users::new(&db, client.clone());
+        let image = Images::new(&db, client.clone());
+        let tag = Tags::new(&db, client.clone());
 
         Ok(Database {
             client,
