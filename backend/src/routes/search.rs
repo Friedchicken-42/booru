@@ -54,3 +54,19 @@ pub async fn image(
 
     Ok(Json(images))
 }
+
+#[derive(Debug, Deserialize)]
+pub struct SearchTag {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    category: String,
+}
+
+pub async fn tag(
+    _: Claims,
+    State(db): State<Database>,
+    Json(query): Json<SearchTag>,
+) -> Result<Json<Vec<TagResponse>>, Error> {
+    Err(Error::TagNotFound)
+}

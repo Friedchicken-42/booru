@@ -49,7 +49,26 @@ impl Tags {
             .await
             .map_err(|_| Error::DatabaseError)
     }
+    
+    pub async fn search(&self, category: &String, name: &String) -> Result<Option<Tag>, Error> {
+        // self.collection.find()
+        Ok(None)
+    }
 
+    #[cfg(not(session))]
+    pub async fn increment(&self, id: &ObjectId) -> Result<(), Error> {
+        self.collection
+            .update_one(
+                doc! {"_id": id },
+                doc! {"$inc": { "count": 1 } },
+                None,
+            ).await
+            .map_err(|_| Error::DatabaseError)?;
+
+        Ok(())
+    }
+
+    #[cfg(session)]
     pub async fn increment(&self, id: &ObjectId, session: &mut ClientSession) -> Result<(), Error> {
         self.collection
             .update_one_with_session(
@@ -63,6 +82,20 @@ impl Tags {
         Ok(())
     }
 
+    #[cfg(not(session))]
+    pub async fn decrement(&self, id: &ObjectId) -> Result<(), Error> {
+        self.collection
+            .update_one(
+                doc! {"_id": id },
+                doc! {"$inc": { "count": -1 } },
+                None,
+            ).await
+            .map_err(|_| Error::DatabaseError)?;
+
+        Ok(())
+    }
+
+    #[cfg(session)]
     pub async fn decrement(&self, id: &ObjectId, session: &mut ClientSession) -> Result<(), Error> {
         self.collection
             .update_one_with_session(

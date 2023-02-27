@@ -42,7 +42,7 @@ async fn main() -> Result<(), Error> {
                         .get(routes::tag::get),
                 )
                 .route("/search/image", post(routes::search::image))
-                // .route("/search/tag", post(routes::search::tag))
+                .route("/search/tag", post(routes::search::tag))
         )
         .layer(CorsLayer::very_permissive())
         .with_state(db);

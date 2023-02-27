@@ -54,12 +54,15 @@ impl Images {
         tag_list: Vec<Tag>,
         tag_coll: &Tags,
     ) -> Result<Image, Error> {
+
+        #[cfg(session)]
         let mut session = self
             .client
             .start_session(None)
             .await
             .map_err(|_| Error::SessionCreate)?;
 
+        #[cfg(session)]
         session
             .start_transaction(None)
             .await
@@ -71,21 +74,29 @@ impl Images {
 
         for id in &ids {
             if !image.tags.contains(id) {
-                tag_coll.increment(id, &mut session).await?;
+                tag_coll.increment(id, #[cfg(session)]&mut session).await?;
             }
         }
 
         for tag in image.tags {
             if !ids.contains(&tag) {
-                tag_coll.decrement(&tag, &mut session).await?;
+                tag_coll.decrement(&tag, #[cfg(session)]&mut session).await?;
             }
         }
 
+        #[cfg(not(session))]
+        self.collection
+            .update_one(doc! {"_id": id}, doc! {"$set": {"tags": ids}}, None)
+            .await
+            .map_err(|_| Error::DatabaseError)?;
+
+        #[cfg(session)]
         self.collection
             .update_one_with_session(doc! {"_id": id}, doc! {"$set": {"tags": ids}}, None, &mut session)
             .await
             .map_err(|_| Error::DatabaseError)?;
 
+        #[cfg(session)]
         session
             .commit_transaction()
             .await
