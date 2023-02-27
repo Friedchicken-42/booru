@@ -1,7 +1,8 @@
 use bson::{doc, oid::ObjectId};
-use mongodb::ClientSession;
+use futures::{StreamExt, TryStreamExt};
+use mongodb::{ClientSession, options::FindOptions};
 
-use crate::{models::tag::Tag, errors::Error};
+use crate::{errors::Error, models::tag::Tag};
 
 #[derive(Clone)]
 pub struct Tags {
@@ -49,20 +50,33 @@ impl Tags {
             .await
             .map_err(|_| Error::DatabaseError)
     }
-    
-    pub async fn search(&self, category: &String, name: &String) -> Result<Option<Tag>, Error> {
-        // self.collection.find()
-        Ok(None)
+
+    pub async fn search(&self, category: &String, name: &String) -> Result<Vec<Tag>, Error> {
+        let mut filter = doc! {};
+
+        if !category.is_empty() {
+            filter.insert("category", doc! { "$regex": category });
+        }
+
+        if !name.is_empty() {
+            filter.insert("name", doc! { "$regex": name });
+        }
+
+        let options = FindOptions::builder().limit(10).build();
+
+        let x = self.collection
+            .find(filter, options)
+            .await
+            .map_err(|_| Error::DatabaseError)?;
+
+        x.try_collect().await.map_err(|_| Error::DatabaseError)
     }
 
     #[cfg(not(session))]
     pub async fn increment(&self, id: &ObjectId) -> Result<(), Error> {
         self.collection
-            .update_one(
-                doc! {"_id": id },
-                doc! {"$inc": { "count": 1 } },
-                None,
-            ).await
+            .update_one(doc! {"_id": id }, doc! {"$inc": { "count": 1 } }, None)
+            .await
             .map_err(|_| Error::DatabaseError)?;
 
         Ok(())
@@ -76,7 +90,8 @@ impl Tags {
                 doc! {"$inc": { "count": 1 } },
                 None,
                 session,
-            ).await
+            )
+            .await
             .map_err(|_| Error::DatabaseError)?;
 
         Ok(())
@@ -85,11 +100,8 @@ impl Tags {
     #[cfg(not(session))]
     pub async fn decrement(&self, id: &ObjectId) -> Result<(), Error> {
         self.collection
-            .update_one(
-                doc! {"_id": id },
-                doc! {"$inc": { "count": -1 } },
-                None,
-            ).await
+            .update_one(doc! {"_id": id }, doc! {"$inc": { "count": -1 } }, None)
+            .await
             .map_err(|_| Error::DatabaseError)?;
 
         Ok(())
@@ -103,7 +115,8 @@ impl Tags {
                 doc! {"$inc": { "count": -1 } },
                 None,
                 session,
-            ).await
+            )
+            .await
             .map_err(|_| Error::DatabaseError)?;
 
         Ok(())
