@@ -120,15 +120,15 @@ pub async fn delete(
 }
 
 #[derive(Deserialize)]
-pub struct Get {
+pub struct Post {
     id: String,
 }
 
 #[debug_handler]
-pub async fn get(
+pub async fn post(
     _: Claims,
     State(db): State<Database>,
-    Json(query): Json<Get>,
+    Json(query): Json<Post>,
 ) -> Result<ImageResponse, Error> {
     let id = Uuid::parse_str(&query.id).map_err(|_| Error::InvalidId)?;
 

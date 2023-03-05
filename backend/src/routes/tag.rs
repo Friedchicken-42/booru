@@ -50,15 +50,15 @@ pub async fn delete(
 }
 
 #[derive(Deserialize)]
-pub struct Get {
+pub struct Post {
     name: String,
     category: String,
 }
 
-pub async fn get(
+pub async fn post(
     _: Claims,
     State(db): State<Database>,
-    Json(query): Json<Get>,
+    Json(query): Json<Post>,
 ) -> Result<TagResponse, Error> {
     let tag = db
         .tag

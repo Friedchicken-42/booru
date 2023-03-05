@@ -5,7 +5,7 @@ mod models;
 mod routes;
 
 use axum::{
-    routing::post,
+    routing::{post, put},
     Router, Server,
 };
 use database::Database;
@@ -30,16 +30,16 @@ async fn main() -> Result<(), Error> {
                 .route("/login", post(routes::user::login))
                 .route(
                     "/image",
-                    post(routes::image::create)
+                    put(routes::image::create)
                         .delete(routes::image::delete)
-                        .get(routes::image::get)
+                        .post(routes::image::post)
                         .patch(routes::image::update),
                 )
                 .route(
                     "/tag",
-                    post(routes::tag::create)
+                    put(routes::tag::create)
                         .delete(routes::tag::delete)
-                        .get(routes::tag::get),
+                        .post(routes::tag::post),
                 )
                 .route("/search/image", post(routes::search::image))
                 .route("/search/tag", post(routes::search::tag))
@@ -70,7 +70,5 @@ async fn main() -> Result<(), Error> {
     get image by id
      - get : /image/:id
      - get : /image?id
-
-    TODO: Should fix get requests w/ json 
 
 */
