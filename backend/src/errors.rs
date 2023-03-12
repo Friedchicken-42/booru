@@ -19,6 +19,7 @@ pub enum Error {
     InvalidId,
     SessionCreate,
     SessionCommit,
+    NotImplemented,
 }
 
 impl IntoResponse for Error {
@@ -40,6 +41,7 @@ impl IntoResponse for Error {
             Error::InvalidId => (StatusCode::BAD_REQUEST, "Invalid Id"),
             Error::SessionCreate => (StatusCode::INTERNAL_SERVER_ERROR, "Session Create"),
             Error::SessionCommit => (StatusCode::INTERNAL_SERVER_ERROR, "Session Commit"),
+            Error::NotImplemented => (StatusCode::INTERNAL_SERVER_ERROR, "Not Implemented"),
         };
 
         let body = Json(json!({
@@ -47,5 +49,12 @@ impl IntoResponse for Error {
         }));
 
         (status, body).into_response()
+    }
+}
+
+impl From<surrealdb::Error> for Error {
+    fn from(e: surrealdb::Error) -> Self {
+        println!("{:?}", e);
+        Self::DatabaseError 
     }
 }

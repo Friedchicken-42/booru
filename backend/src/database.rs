@@ -1,48 +1,55 @@
-use mongodb::{bson::doc, options::ClientOptions, Client};
+use surrealdb::{
+    engine::remote::ws::{Client, Ws},
+    opt::auth::Root,
+    Surreal, method::Query,
+};
 
 use crate::errors::Error;
 
-use self::{image::Images, tag::Tags, user::Users};
+// use self::{image::Images, tag::Tags, user::Users};
+use self::{image::ImageDB, tag::TagDB};
 
 pub mod image;
 pub mod tag;
-pub mod user;
+// pub mod user;
+
+pub type Session<'a> = Query<'a, Client>;
 
 #[derive(Clone)]
 pub struct Database {
-    client: Client,
-    pub user: Users,
-    pub image: Images,
-    pub tag: Tags,
+    pub client: Surreal<Client>,
+    // pub user: Users,
+    pub image: ImageDB,
+    pub tag: TagDB,
 }
 
 impl Database {
-    pub async fn connect(url: String) -> Result<Self, Error> {
-        let mut options = ClientOptions::parse(url)
+    pub async fn new(url: String) -> Result<Self, Error> {
+        let client = Surreal::new::<Ws>(url)
             .await
             .map_err(|_| Error::DatabaseConnection)?;
 
-        options.app_name = Some("Booru".to_string());
-
-        let client = Client::with_options(options).map_err(|_| Error::DatabaseConnection)?;
-
-        let db = client.database("booru");
-        let user = Users::new(&db, client.clone());
-        let image = Images::new(&db, client.clone());
-        let tag = Tags::new(&db, client.clone());
-
-        Ok(Database {
-            client,
-            user,
-            image,
-            tag,
+        Ok(Self {
+            client: client.clone(),
+            // user: Users(db.clone()),
+            image: ImageDB(client.clone()),
+            tag: TagDB(client.clone()),
         })
     }
 
-    pub async fn ping(self) -> Result<Self, Error> {
+    pub async fn signin(self, username: &str, password: &str) -> Result<Self, Error> {
         self.client
-            .database("admin")
-            .run_command(doc! {"ping": 1}, None)
+            .signin(Root { username, password })
+            .await
+            .map_err(|_| Error::DatabaseConnection)?;
+
+        Ok(self)
+    }
+
+    pub async fn connect(self, namespace: &str, database: &str) -> Result<Self, Error> {
+        self.client
+            .use_ns(namespace)
+            .use_db(database)
             .await
             .map_err(|_| Error::DatabaseConnection)?;
 

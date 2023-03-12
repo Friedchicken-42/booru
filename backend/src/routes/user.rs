@@ -23,9 +23,10 @@ pub async fn login(
         return Err(Error::MissingCredential);
     }
 
-    let user = db.user.authenticate(name.clone(), password).await?;
+    // let user = db.user.authenticate(name.clone(), password).await?;
 
-    let claims = Claims::new(user.id.to_string());
+    // let claims = Claims::new(user.id.to_string());
+    let claims = Claims::new(name);
     let token = claims.encode()?;
 
     Ok(Json(token))

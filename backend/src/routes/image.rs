@@ -10,20 +10,18 @@ use reqwest::{
     Client,
 };
 use serde::Deserialize;
+use surrealdb::sql::statements::{BeginStatement, CommitStatement};
 use uuid::Uuid;
 
 use crate::{
     database::Database,
     errors::Error,
     jwt::Claims,
-    models::{
-        image::{Image, ImageResponse},
-        tag::{Convert, TagResponse},
-    },
+    models::{image::Image, tag::Tag, tagresponse::TagResponse, imageresponse::ImageResponse},
 };
 
 async fn upload(image: &Image, data: Bytes) -> Result<(), Error> {
-    let hash = image.id.simple().to_string();
+    let hash = image.hash.clone();
     let part = Part::bytes(data.to_vec()).file_name(hash);
 
     let multipart = Form::new().part("file", part);
@@ -80,17 +78,16 @@ pub async fn create(
         }
 
         let image = Image::new(&data, content_type);
-        let option = db.image.get(&image.id).await?;
 
-        if option.is_some() {
+        if db.image.get(&image.hash).await?.is_some() {
             return Err(Error::ImageExists);
         }
 
-        upload(&image, data).await?;
+        // upload(&image, data).await?;
 
-        db.image.insert(&image).await?;
+        db.image.create(&image).await?;
 
-        return Ok(image.id.simple().to_string());
+        return Ok(image.hash);
     }
 
     Err(Error::MissingField)
@@ -98,7 +95,7 @@ pub async fn create(
 
 #[derive(Deserialize)]
 pub struct Delete {
-    id: String,
+    hash: String,
 }
 
 pub async fn delete(
@@ -106,22 +103,18 @@ pub async fn delete(
     State(db): State<Database>,
     Json(query): Json<Delete>,
 ) -> Result<String, Error> {
-    let id = Uuid::parse_str(&query.id).map_err(|_| Error::InvalidId)?;
+    let hash = query.hash;
 
-    let option = db.image.get(&id).await?;
+    let image = db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?;
 
-    if option.is_none() {
-        return Err(Error::ImageNotFound);
-    }
+    db.image.delete(image).await?;
 
-    db.image.delete(&id).await?;
-
-    Ok(id.simple().to_string())
+    Ok(hash)
 }
 
 #[derive(Deserialize)]
 pub struct Post {
-    id: String,
+    hash: String,
 }
 
 #[debug_handler]
@@ -130,16 +123,23 @@ pub async fn post(
     State(db): State<Database>,
     Json(query): Json<Post>,
 ) -> Result<ImageResponse, Error> {
-    let id = Uuid::parse_str(&query.id).map_err(|_| Error::InvalidId)?;
+    let image = db
+        .image
+        .get(&query.hash)
+        .await?
+        .ok_or(Error::ImageNotFound)?;
 
-    let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
+    println!("{:?}", image);
 
-    image.convert(&db).await
+    let image = db.image.tagged(image).await?;
+
+    Ok(ImageResponse::new(image))
 }
 
 #[derive(Deserialize)]
 pub struct Update {
-    id: String,
+    hash: String,
+    #[serde(default)]
     tags: Vec<TagResponse>,
 }
 
@@ -148,10 +148,49 @@ pub async fn update(
     State(db): State<Database>,
     Json(query): Json<Update>,
 ) -> Result<ImageResponse, Error> {
-    let id = Uuid::parse_str(&query.id).map_err(|_| Error::InvalidId)?;
+    let Update { hash, tags } = query;
 
-    let tags = try_join_all(query.tags.into_iter().map(|t| t.convert(&db))).await?;
+    let image = db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?;
+    println!("image: {:?}", image);
 
-    let image = db.image.set(&id, tags, &db.tag).await?;
-    image.convert(&db).await
+    let old_tags = db.tag.from_image(&image).await?;
+    println!("old_tags: {:?}", old_tags);
+
+    let tags = try_join_all(tags.iter().map(|t| db.tag.get(&t.name, &t.category))).await?;
+    println!("tags: {:?}", tags);
+
+    let new_tags = tags
+        .into_iter()
+        .collect::<Option<Vec<Tag>>>()
+        .ok_or(Error::DatabaseError)?;
+
+    println!("new_tags: {:?}", new_tags);
+
+    let mut session = db.client.query(BeginStatement);
+
+    for old in &old_tags {
+        if !new_tags.contains(old) {
+            // delete 
+            session = db.image.unrelate(&image, old, session)?;
+            // decrement tag
+            session = db.tag.update(old, -1, session)?;
+        }
+    }
+    
+    for new in &new_tags {
+        if !old_tags.contains(new) {
+            println!("AAAAAAAAAAAAA {:?}", new);
+            // add
+            session = db.image.relate(&image, new, session)?;
+            // increment tag
+            session = db.tag.update(new, 1, session)?;
+        }
+    }
+
+    let response = session.query(CommitStatement).await?;
+    response.check()?; 
+
+    let image = db.image.tagged(image).await?;
+
+    Ok(ImageResponse::new(image))
 }
