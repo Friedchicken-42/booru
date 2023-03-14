@@ -60,10 +60,10 @@ pub async fn tag(
     _: Claims,
     State(db): State<Database>,
     Json(query): Json<SearchTag>,
-) -> Result<(), Error> {
-    // let tags = db.tag.search(&query.category, &query.name).await?;
+    ) -> Result<Json<Vec<TagResponse>>, Error> {
+    let tags = db.tag.search(&query.category, &query.name).await?;
+    let tags = tags.into_iter().map(TagResponse::new).collect();
     // let tags = try_join_all(tags.into_iter().map(|tag| tag.convert(&db))).await?;
 
-    // Ok(Json(tags))
-    Err(Error::NotImplemented)
+    Ok(Json(tags))
 }

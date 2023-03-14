@@ -46,7 +46,7 @@ async fn main() -> Result<(), Error> {
                         .delete(routes::tag::delete)
                 )
                 .route("/search/image", post(routes::search::image))
-                // .route("/search/tag", post(routes::search::tag)),
+                .route("/search/tag", post(routes::search::tag)),
         )
         .layer(CorsLayer::very_permissive())
         .with_state(db);

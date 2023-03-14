@@ -28,6 +28,17 @@ impl TagDB {
 
         Ok(res.take(0)?)
     }
+    
+    pub async fn search(&self, category: &String, name: &String) -> Result<Vec<Tag>, Error> {
+        let query = format!("select * from tag where category = /^{}/ and name = /^{}/;", category, name);
+
+        let mut res = self
+            .0
+            .query(query)
+            .await?;
+
+        Ok(res.take(0)?)        
+    }
 
     pub async fn convert(&self, tags: Vec<TagResponse>) -> Result<Vec<Tag>, Error> {
         let tags = try_join_all(tags.iter().map(|t| self.get(&t.name, &t.category))).await?;
