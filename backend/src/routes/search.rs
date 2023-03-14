@@ -7,7 +7,7 @@ use crate::{
     database::Database,
     errors::Error,
     jwt::Claims,
-    models::{tag::Tag, tagresponse::TagResponse},
+    models::{tag::Tag, tagresponse::TagResponse, imageresponse::ImageResponse},
     // models::{
     //     image::ImageResponse,
     //     tag::{Convert, TagResponse},
@@ -29,39 +29,23 @@ pub async fn image(
     _: Claims,
     State(db): State<Database>,
     Json(query): Json<SearchImage>,
-) -> Result<(), Error> {
+) -> Result<Json<Vec<ImageResponse>>, Error> {
     println!(
         "{:?} {:?} {:?}",
         query.include, query.exclude, query.previous
     );
 
-    // let include = try_join_all(query.include.into_iter().map(|t| t.convert(&db))).await?;
-    // let exclude = try_join_all(query.exclude.into_iter().map(|t| t.convert(&db))).await?;
-
     let include = db.tag.convert(query.include).await?;
     let exclude = db.tag.convert(query.exclude).await?;
-    // let previous = match query.previous {
-    //     Some(hash) => {
-    //         let id = Uuid::parse_str(&hash).map_err(|_| Error::InvalidId)?;
-    //         let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
-    //         Some(image)
-    //     }
-    //     None => None,
-    // };
     let previous = match query.previous {
         Some(hash) => Some(db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?),
         None => None,
     };
 
     let images = db.image.search(include, exclude, previous).await?;
+    let images = images.into_iter().map(ImageResponse::new).collect(); 
 
-    // println!("{include:?} {exclude:?}");
-
-    // let images = db.image.search(include, exclude, previous).await?;
-    // let images = try_join_all(images.into_iter().map(|i| i.convert(&db))).await?;
-
-    // Ok(Json(images))
-    Err(Error::NotImplemented)
+    Ok(Json(images))
 }
 
 #[derive(Debug, Deserialize)]

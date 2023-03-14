@@ -80,8 +80,6 @@ impl TagDB {
     ) -> Result<Session<'a>, Error> {
         let id = tag.id.clone().ok_or(Error::InvalidId)?;
 
-        println!("tag id: {:?}", id);
-
         let query = format!("update {} set count += {};", id, offset);
         let s = session.query(query);
 

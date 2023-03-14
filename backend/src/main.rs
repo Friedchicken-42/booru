@@ -45,7 +45,7 @@ async fn main() -> Result<(), Error> {
                         .post(routes::tag::post)
                         .delete(routes::tag::delete)
                 )
-                // .route("/search/image", post(routes::search::image))
+                .route("/search/image", post(routes::search::image))
                 // .route("/search/tag", post(routes::search::tag)),
         )
         .layer(CorsLayer::very_permissive())

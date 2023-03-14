@@ -170,19 +170,14 @@ pub async fn update(
 
     for old in &old_tags {
         if !new_tags.contains(old) {
-            // delete 
             session = db.image.unrelate(&image, old, session)?;
-            // decrement tag
             session = db.tag.update(old, -1, session)?;
         }
     }
     
     for new in &new_tags {
         if !old_tags.contains(new) {
-            println!("AAAAAAAAAAAAA {:?}", new);
-            // add
             session = db.image.relate(&image, new, session)?;
-            // increment tag
             session = db.tag.update(new, 1, session)?;
         }
     }
