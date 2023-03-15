@@ -4,7 +4,7 @@ use serde::Deserialize;
 use crate::{
     database::Database,
     errors::Error,
-    jwt::{Claims, Token},
+    jwt::{Claims, Token}, models::user::User,
 };
 
 #[derive(Debug, Deserialize)]
@@ -23,10 +23,10 @@ pub async fn login(
         return Err(Error::MissingCredential);
     }
 
-    // let user = db.user.authenticate(name.clone(), password).await?;
+    let user = User::new(name, password);
+    let user = db.user.authenticate(user).await?;
 
-    // let claims = Claims::new(user.id.to_string());
-    let claims = Claims::new(name);
+    let claims = Claims::new(user.name);
     let token = claims.encode()?;
 
     Ok(Json(token))

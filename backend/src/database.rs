@@ -6,19 +6,18 @@ use surrealdb::{
 
 use crate::errors::Error;
 
-// use self::{image::Images, tag::Tags, user::Users};
-use self::{image::ImageDB, tag::TagDB};
+use self::{image::ImageDB, tag::TagDB, user::UserDB};
 
 pub mod image;
 pub mod tag;
-// pub mod user;
+pub mod user;
 
 pub type Session<'a> = Query<'a, Client>;
 
 #[derive(Clone)]
 pub struct Database {
     pub client: Surreal<Client>,
-    // pub user: Users,
+    pub user: UserDB,
     pub image: ImageDB,
     pub tag: TagDB,
 }
@@ -31,7 +30,7 @@ impl Database {
 
         Ok(Self {
             client: client.clone(),
-            // user: Users(db.clone()),
+            user: UserDB(client.clone()),
             image: ImageDB(client.clone()),
             tag: TagDB(client.clone()),
         })
