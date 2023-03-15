@@ -18,8 +18,6 @@ pub enum Error {
     Upload,
     Serialize,
     InvalidId,
-    SessionCreate,
-    SessionCommit,
     NotImplemented,
 }
 
@@ -41,8 +39,6 @@ impl IntoResponse for Error {
             Error::Upload => (StatusCode::BAD_REQUEST, "Upload Error"),
             Error::Serialize => (StatusCode::INTERNAL_SERVER_ERROR, "Serialize"),
             Error::InvalidId => (StatusCode::BAD_REQUEST, "Invalid Id"),
-            Error::SessionCreate => (StatusCode::INTERNAL_SERVER_ERROR, "Session Create"),
-            Error::SessionCommit => (StatusCode::INTERNAL_SERVER_ERROR, "Session Commit"),
             Error::NotImplemented => (StatusCode::INTERNAL_SERVER_ERROR, "Not Implemented"),
         };
 

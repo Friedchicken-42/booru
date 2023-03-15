@@ -11,7 +11,6 @@ use reqwest::{
 };
 use serde::Deserialize;
 use surrealdb::sql::statements::{BeginStatement, CommitStatement};
-use uuid::Uuid;
 
 use crate::{
     database::Database,

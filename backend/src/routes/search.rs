@@ -1,17 +1,12 @@
 use axum::{extract::State, Json};
 use axum_macros::debug_handler;
-use futures::future::try_join_all;
 use serde::Deserialize;
 
 use crate::{
     database::Database,
     errors::Error,
     jwt::Claims,
-    models::{tag::Tag, tagresponse::TagResponse, imageresponse::ImageResponse},
-    // models::{
-    //     image::ImageResponse,
-    //     tag::{Convert, TagResponse},
-    // },
+    models::{tagresponse::TagResponse, imageresponse::ImageResponse},
 };
 
 #[derive(Debug, Deserialize)]
