@@ -1,14 +1,59 @@
+use std::num::NonZeroU32;
+
+use ring::{
+    digest,
+    pbkdf2::{self, derive, verify},
+    rand::{SecureRandom, SystemRandom},
+};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+use crate::errors::Error;
+
+const ITERATIONS: u32 = 100_000;
+const SALT_SIZE: usize = 64;
+const CREDENTIAL_SIZE: usize = digest::SHA512_OUTPUT_LEN;
+
+#[serde_with::serde_as]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct User {
     pub name: String,
-    pub password: String,
+    #[serde_as(as = "serde_with::hex::Hex")]
+    pub salt: [u8; SALT_SIZE],
+    #[serde_as(as = "serde_with::hex::Hex")]
+    pub hash: [u8; CREDENTIAL_SIZE],
 }
 
 impl User {
-    pub fn new(name: String, password: String) -> Self {
-        // TODO: hash password here
-        Self { name, password }
+    pub fn hash(name: String, password: String) -> Result<Self, Error> {
+        let mut salt = [0u8; SALT_SIZE];
+        let iterations = NonZeroU32::new(ITERATIONS).ok_or(Error::Hashing)?;
+
+        let rng = SystemRandom::new();
+        rng.fill(&mut salt).map_err(|_| Error::Hashing)?;
+
+        let mut hash = [0u8; CREDENTIAL_SIZE];
+
+        derive(
+            pbkdf2::PBKDF2_HMAC_SHA512,
+            iterations,
+            &salt,
+            password.as_bytes(),
+            &mut hash,
+        );
+
+        Ok(Self { name, salt, hash })
+    }
+
+    pub fn verify(&self, password: String) -> Result<(), Error> {
+        let iterations = NonZeroU32::new(ITERATIONS).ok_or(Error::Hashing)?;
+
+        verify(
+            pbkdf2::PBKDF2_HMAC_SHA512,
+            iterations,
+            &self.salt,
+            &password.as_bytes(),
+            &self.hash,
+        )
+        .map_err(|_| Error::WrongCredential)
     }
 }

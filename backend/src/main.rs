@@ -32,6 +32,7 @@ async fn main() -> Result<(), Error> {
             "/api/v1",
             Router::new()
                 .route("/login", post(routes::user::login))
+                .route("/signup", post(routes::user::signup))
                 .route(
                     "/image",
                     put(routes::image::create)
