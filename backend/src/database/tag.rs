@@ -13,9 +13,9 @@ use super::Session;
 pub struct TagDB(pub Surreal<Client>);
 
 impl TagDB {
-    pub async fn create(self, tag: &Tag) -> Result<(), Error> {
-        let _: Tag = self.0.create("tag").content(tag).await?;
-        Ok(())
+    pub async fn create(self, tag: &Tag) -> Result<Tag, Error> {
+        let tag: Tag = self.0.create("tag").content(tag).await?;
+        Ok(tag)
     }
 
     pub async fn get(&self, name: &String, category: &String) -> Result<Option<Tag>, Error> {

@@ -62,7 +62,7 @@ async fn parse_field(field: Field<'_>) -> Option<(String, String, String, Bytes)
 }
 
 pub async fn create(
-    _: Claims,
+    claims: Claims,
     State(db): State<Database>,
     mut multipart: Multipart,
 ) -> Result<String, Error> {
@@ -82,9 +82,17 @@ pub async fn create(
             return Err(Error::ImageExists);
         }
 
-        // upload(&image, data).await?;
+        upload(&image, data).await?;
+        let name = claims.sub;
 
-        db.image.create(&image).await?;
+        let user = db.user.get(&name).await?.ok_or(Error::UserNotFound)?;
+
+        let image = db.image.create(&image).await?;
+
+        if db.image.user(&image, &user).await.is_err() {
+            db.image.delete(image).await?;
+            return Err(Error::InvalidId);
+        }
 
         return Ok(image.hash);
     }
@@ -169,14 +177,14 @@ pub async fn update(
 
     for old in &old_tags {
         if !new_tags.contains(old) {
-            session = db.image.unrelate(&image, old, session)?;
+            session = db.image.untag(&image, old, session)?;
             session = db.tag.update(old, -1, session)?;
         }
     }
     
     for new in &new_tags {
         if !old_tags.contains(new) {
-            session = db.image.relate(&image, new, session)?;
+            session = db.image.tag(&image, new, session)?;
             session = db.tag.update(new, 1, session)?;
         }
     }
@@ -184,6 +192,7 @@ pub async fn update(
     let response = session.query(CommitStatement).await?;
     response.check()?; 
 
+    println!("asdf");
     let image = db.image.tagged(image).await?;
 
     Ok(ImageResponse::new(image))

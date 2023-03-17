@@ -3,7 +3,7 @@ use surrealdb::{engine::remote::ws::Client, Surreal};
 
 use crate::{
     errors::Error,
-    models::{image::Image, tag::Tag, taggedimage::TaggedImage},
+    models::{image::Image, tag::Tag, taggedimage::TaggedImage, user::User},
 };
 
 use super::Session;
@@ -12,14 +12,14 @@ use super::Session;
 pub struct ImageDB(pub Surreal<Client>);
 
 impl ImageDB {
-    pub async fn create(&self, image: &Image) -> Result<(), Error> {
-        let _: Image = self
+    pub async fn create(&self, image: &Image) -> Result<Image, Error> {
+        let image: Image = self
             .0
             .create(("image", image.hash.clone()))
             .content(image)
             .await?;
 
-        Ok(())
+        Ok(image)
     }
 
     pub async fn get(&self, hash: &String) -> Result<Option<Image>, Error> {
@@ -46,11 +46,24 @@ impl ImageDB {
             .collect::<Option<Vec<String>>>()
             .ok_or(Error::TagNotFound)?;
 
-        let query = format!("select * from image where {:?} allinside ->tagged->tag.*.id", include);
+        let query = format!(
+            "select * from image where {:?} allinside ->tagged->tag.*.id",
+            include
+        );
         let mut res = self.0.query(query).await?;
         let images: Vec<Image> = res.take(0)?;
 
         try_join_all(images.into_iter().map(|image| self.tagged(image))).await
+    }
+
+    pub async fn user(&self, image: &Image, user: &User) -> Result<(), Error> {
+        let image_id = image.id.clone().ok_or(Error::InvalidId)?;
+        let user_id = user.id.clone().ok_or(Error::InvalidId)?;
+
+        let query = format!("relate {}->upload->{};", user_id, image_id);
+        self.0.query(query).await?;
+
+        Ok(())
     }
 
     pub async fn tagged(&self, image: Image) -> Result<TaggedImage, Error> {
@@ -58,7 +71,7 @@ impl ImageDB {
 
         let mut res = self
             .0
-            .query("select *, ->tagged->tag.* as tags from $image")
+            .query("select *, ->tagged->tag.* as tags, <-upload<-user.name as user from $image")
             .bind(("image", id))
             .await?;
 
@@ -67,7 +80,7 @@ impl ImageDB {
         image.ok_or(Error::InvalidId)
     }
 
-    pub fn relate<'a>(
+    pub fn tag<'a>(
         &self,
         image: &Image,
         tag: &Tag,
@@ -82,7 +95,7 @@ impl ImageDB {
         Ok(s)
     }
 
-    pub fn unrelate<'a>(
+    pub fn untag<'a>(
         &self,
         image: &Image,
         tag: &Tag,

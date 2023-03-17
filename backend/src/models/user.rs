@@ -16,6 +16,8 @@ const CREDENTIAL_SIZE: usize = digest::SHA512_OUTPUT_LEN;
 #[serde_with::serde_as]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
+    #[serde(skip_serializing)]
+    pub id: Option<String>,
     pub name: String,
     #[serde_as(as = "serde_with::hex::Hex")]
     pub salt: [u8; SALT_SIZE],
@@ -41,7 +43,12 @@ impl User {
             &mut hash,
         );
 
-        Ok(Self { name, salt, hash })
+        Ok(Self {
+            id: None,
+            name,
+            salt,
+            hash,
+        })
     }
 
     pub fn verify(&self, password: String) -> Result<(), Error> {
