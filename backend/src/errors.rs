@@ -14,11 +14,13 @@ pub enum Error {
     ImageNotFound,
     TagExists,
     TagNotFound,
+    UserExists,
+    UserNotFound,
+    Hashing,
     Upload,
     Serialize,
     InvalidId,
-    SessionCreate,
-    SessionCommit,
+    NotImplemented,
 }
 
 impl IntoResponse for Error {
@@ -35,11 +37,13 @@ impl IntoResponse for Error {
             Error::ImageNotFound => (StatusCode::BAD_REQUEST, "Image not found"),
             Error::TagExists => (StatusCode::BAD_REQUEST, "Tag already exists"),
             Error::TagNotFound => (StatusCode::BAD_REQUEST, "Tag not found"),
+            Error::UserExists => (StatusCode::BAD_REQUEST, "User already exists"),
+            Error::UserNotFound => (StatusCode::BAD_REQUEST, "User not found"),
+            Error::Hashing => (StatusCode::INTERNAL_SERVER_ERROR, "Hashing password"),
             Error::Upload => (StatusCode::BAD_REQUEST, "Upload Error"),
             Error::Serialize => (StatusCode::INTERNAL_SERVER_ERROR, "Serialize"),
             Error::InvalidId => (StatusCode::BAD_REQUEST, "Invalid Id"),
-            Error::SessionCreate => (StatusCode::INTERNAL_SERVER_ERROR, "Session Create"),
-            Error::SessionCommit => (StatusCode::INTERNAL_SERVER_ERROR, "Session Commit"),
+            Error::NotImplemented => (StatusCode::INTERNAL_SERVER_ERROR, "Not Implemented"),
         };
 
         let body = Json(json!({
@@ -47,5 +51,12 @@ impl IntoResponse for Error {
         }));
 
         (status, body).into_response()
+    }
+}
+
+impl From<surrealdb::Error> for Error {
+    fn from(e: surrealdb::Error) -> Self {
+        println!("{:?}", e);
+        Self::DatabaseError 
     }
 }

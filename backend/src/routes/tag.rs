@@ -5,7 +5,8 @@ use crate::{
     database::Database,
     errors::Error,
     jwt::Claims,
-    models::tag::{Tag, TagResponse, Convert},
+    models::{tag::Tag, tagresponse::TagResponse},
+    // models::tag::{Tag, TagResponse, Convert},
 };
 
 #[derive(Deserialize)]
@@ -22,9 +23,13 @@ pub async fn create(
 ) -> Result<TagResponse, Error> {
     let tag = Tag::new(query.name, query.category, query.description);
 
-    db.tag.insert(&tag).await?;
+    if db.tag.get(&tag.name, &tag.category).await?.is_some() {
+        return Err(Error::TagExists);
+    }
 
-    Ok(tag.convert(&db).await?.clean())
+    db.tag.create(&tag).await?;
+
+    Ok(TagResponse::new(tag))
 }
 
 #[derive(Deserialize)]
@@ -37,16 +42,15 @@ pub async fn delete(
     _: Claims,
     State(db): State<Database>,
     Json(query): Json<Delete>,
-) -> Result<TagResponse, Error> {
-    let option = db.tag.find(&query.category, &query.name).await?;
+) -> Result<(), Error> {
+    let tag = db.tag
+        .get(&query.name, &query.category)
+        .await?
+        .ok_or(Error::TagNotFound)?;
 
-    let Some(tag) = option else {
-        return Err(Error::TagNotFound);
-    };
+    db.tag.delete(tag).await?;
 
-    db.tag.delete(&tag.category, &tag.name).await?;
-
-    Ok(tag.convert(&db).await?.clean())
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -60,11 +64,10 @@ pub async fn post(
     State(db): State<Database>,
     Json(query): Json<Post>,
 ) -> Result<TagResponse, Error> {
-    let tag = db
-        .tag
-        .find(&query.category, &query.name)
+    let tag = db.tag
+        .get(&query.name, &query.category)
         .await?
         .ok_or(Error::TagNotFound)?;
 
-    tag.convert(&db).await
+    Ok(TagResponse::with_description(tag))
 }

@@ -1,108 +1,37 @@
-use bson::{doc, oid::ObjectId};
-use futures::StreamExt;
-use uuid::Uuid;
+use futures::future::try_join_all;
+use surrealdb::{engine::remote::ws::Client, Surreal};
 
 use crate::{
     errors::Error,
-    models::{image::Image, tag::Tag},
+    models::{image::Image, tag::Tag, taggedimage::TaggedImage, user::User},
 };
 
-use super::tag::Tags;
+use super::Session;
 
 #[derive(Clone)]
-pub struct Images {
-    collection: mongodb::Collection<Image>,
-    client: mongodb::Client,
-}
+pub struct ImageDB(pub Surreal<Client>);
 
-impl Images {
-    pub fn new(db: &mongodb::Database, client: mongodb::Client) -> Images {
-        Images {
-            collection: db.collection::<Image>("images"),
-            client,
-        }
+impl ImageDB {
+    pub async fn create(&self, image: &Image) -> Result<Image, Error> {
+        let image: Image = self
+            .0
+            .create(("image", image.hash.clone()))
+            .content(image)
+            .await?;
+
+        Ok(image)
     }
 
-    pub async fn insert(&self, image: &Image) -> Result<(), Error> {
-        self.collection
-            .insert_one(image, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
+    pub async fn get(&self, hash: &String) -> Result<Option<Image>, Error> {
+        Ok(self.0.select(("image", hash.to_owned())).await?)
+    }
+
+    pub async fn delete(&self, image: Image) -> Result<(), Error> {
+        let id = image.id.ok_or(Error::ImageNotFound)?;
+        let (_, id) = id.split_at(6);
+        self.0.delete(("image", id)).await?;
 
         Ok(())
-    }
-
-    pub async fn delete(&self, id: &Uuid) -> Result<(), Error> {
-        self.collection
-            .delete_one(doc! {"_id": id}, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
-
-        Ok(())
-    }
-
-    pub async fn get(&self, id: &Uuid) -> Result<Option<Image>, Error> {
-        self.collection
-            .find_one(doc! {"_id": id}, None)
-            .await
-            .map_err(|_| Error::DatabaseError)
-    }
-
-    pub async fn set(
-        &self,
-        id: &Uuid,
-        tag_list: Vec<Tag>,
-        tag_coll: &Tags,
-    ) -> Result<Image, Error> {
-
-        #[cfg(session)]
-        let mut session = self
-            .client
-            .start_session(None)
-            .await
-            .map_err(|_| Error::SessionCreate)?;
-
-        #[cfg(session)]
-        session
-            .start_transaction(None)
-            .await
-            .map_err(|_| Error::SessionCreate)?;
-
-        let image = self.get(id).await?.ok_or(Error::ImageNotFound)?;
-
-        let ids: Vec<ObjectId> = tag_list.iter().map(|t| t.id).collect();
-
-        for id in &ids {
-            if !image.tags.contains(id) {
-                tag_coll.increment(id, #[cfg(session)]&mut session).await?;
-            }
-        }
-
-        for tag in image.tags {
-            if !ids.contains(&tag) {
-                tag_coll.decrement(&tag, #[cfg(session)]&mut session).await?;
-            }
-        }
-
-        #[cfg(not(session))]
-        self.collection
-            .update_one(doc! {"_id": id}, doc! {"$set": {"tags": ids}}, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
-
-        #[cfg(session)]
-        self.collection
-            .update_one_with_session(doc! {"_id": id}, doc! {"$set": {"tags": ids}}, None, &mut session)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
-
-        #[cfg(session)]
-        session
-            .commit_transaction()
-            .await
-            .map_err(|_| Error::SessionCommit)?;
-
-        self.get(id).await?.ok_or(Error::DatabaseError)
     }
 
     pub async fn search(
@@ -110,63 +39,77 @@ impl Images {
         include: Vec<Tag>,
         exclude: Vec<Tag>,
         previous: Option<Image>,
-    ) -> Result<Vec<Image>, Error> {
-        println!("{include:?} {exclude:?} {previous:?}");
-        let limit: u32 = 5;
+    ) -> Result<Vec<TaggedImage>, Error> {
+        let include = include
+            .into_iter()
+            .map(|t| t.id)
+            .collect::<Option<Vec<String>>>()
+            .ok_or(Error::TagNotFound)?;
 
-        let mut pipeline = vec![];
+        let query = format!(
+            "select * from image where {:?} allinside ->tagged->tag.*.id",
+            include
+        );
+        let mut res = self.0.query(query).await?;
+        let images: Vec<Image> = res.take(0)?;
 
-        let include: Vec<ObjectId> = include.iter().map(|t| t.id).collect();
-        let exclude: Vec<ObjectId> = exclude.iter().map(|t| t.id).collect();
+        try_join_all(images.into_iter().map(|image| self.tagged(image))).await
+    }
 
-        if !include.is_empty() {
-            pipeline.append(&mut vec![doc! {
-                "$match": {
-                    "tags": {
-                        "$in": include
-                    }
-                }
-            }]);
-        }
+    pub async fn user(&self, image: &Image, user: &User) -> Result<(), Error> {
+        let image_id = image.id.clone().ok_or(Error::InvalidId)?;
+        let user_id = user.id.clone().ok_or(Error::InvalidId)?;
 
-        if !exclude.is_empty() {
-            pipeline.append(&mut vec![doc! {
-                "$match": {
-                    "tags": {
-                        "$not": {
-                            "$in": exclude
-                        }
-                    }
-                }
-            }]);
-        }
+        let query = format!("relate {}->upload->{};", user_id, image_id);
+        self.0.query(query).await?;
 
-        pipeline.append(&mut vec![
-            doc! { "$sort": { "created_at": -1 } },
-            doc! { "$limit": limit },
-        ]);
+        Ok(())
+    }
 
-        if let Some(prev) = previous {
-            pipeline.push(doc! {
-                "$match": {
-                    "created_at": { "$lt": prev.created_at }
-                }
-            });
-        }
+    pub async fn tagged(&self, image: Image) -> Result<TaggedImage, Error> {
+        let id = image.id.ok_or(Error::ImageNotFound)?;
 
-        let mut cursor = self
-            .collection
-            .aggregate(pipeline, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
+        let mut res = self
+            .0
+            .query("select *, ->tagged->tag.* as tags, <-upload<-user.name as user from $image")
+            .bind(("image", id))
+            .await?;
 
-        let mut images = Vec::with_capacity(limit as usize);
-        while let Some(document) = cursor.next().await {
-            let document = document.map_err(|_| Error::DatabaseError)?;
-            let image = bson::from_document(document).map_err(|_| Error::DatabaseError)?;
-            images.push(image);
-        }
+        let image: Option<TaggedImage> = res.take(0)?;
 
-        Ok(images)
+        image.ok_or(Error::InvalidId)
+    }
+
+    pub fn tag<'a>(
+        &self,
+        image: &Image,
+        tag: &Tag,
+        session: Session<'a>,
+    ) -> Result<Session<'a>, Error> {
+        let image_id = image.id.clone().ok_or(Error::InvalidId)?;
+        let tag_id = tag.id.clone().ok_or(Error::InvalidId)?;
+
+        let query = format!("relate {}->tagged->{};", image_id, tag_id);
+        let s = session.query(query);
+
+        Ok(s)
+    }
+
+    pub fn untag<'a>(
+        &self,
+        image: &Image,
+        tag: &Tag,
+        session: Session<'a>,
+    ) -> Result<Session<'a>, Error> {
+        let image_id = image.id.clone().ok_or(Error::InvalidId)?;
+        let tag_id = tag.id.clone().ok_or(Error::InvalidId)?;
+
+        let query = format!(
+            "delete tagged where in = {} and out = {};",
+            image_id, tag_id
+        );
+        let s = session.query(query);
+
+        Ok(s)
     }
 }

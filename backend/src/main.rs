@@ -18,31 +18,36 @@ use tower_http::cors::CorsLayer;
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     dotenv().ok();
-
     let url = env::var("DATABASE_URL").map_err(|_| Error::DatabaseConnection)?;
 
-    let db = Database::connect(url).await?.ping().await?;
+    let db = Database::new(url)
+        .await?
+        .signin("root", "root")
+        .await?
+        .connect("booru", "booru")
+        .await?;
 
     let app = Router::new()
         .nest(
             "/api/v1",
             Router::new()
                 .route("/login", post(routes::user::login))
+                .route("/signup", post(routes::user::signup))
                 .route(
                     "/image",
                     put(routes::image::create)
-                        .delete(routes::image::delete)
                         .post(routes::image::post)
-                        .patch(routes::image::update),
+                        .delete(routes::image::delete)
+                        .patch(routes::image::update)
                 )
                 .route(
                     "/tag",
                     put(routes::tag::create)
+                        .post(routes::tag::post)
                         .delete(routes::tag::delete)
-                        .post(routes::tag::post),
                 )
                 .route("/search/image", post(routes::search::image))
-                .route("/search/tag", post(routes::search::tag))
+                .route("/search/tag", post(routes::search::tag)),
         )
         .layer(CorsLayer::very_permissive())
         .with_state(db);

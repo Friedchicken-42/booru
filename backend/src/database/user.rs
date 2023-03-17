@@ -1,31 +1,44 @@
-use bson::{oid::ObjectId, DateTime};
+use surrealdb::{engine::remote::ws::Client, Surreal};
 
-use crate::{models::user::User, errors::Error};
+use crate::errors::Error;
+use crate::models::user::User;
 
 #[derive(Clone)]
-pub struct Users {
-    collection: mongodb::Collection<User>,
-    client: mongodb::Client,
-}
+pub struct UserDB(pub Surreal<Client>);
 
-impl Users {
-    pub fn new(db: &mongodb::Database, client: mongodb::Client) -> Users {
-        Users {
-            collection: db.collection::<User>("users"),
-            client,
+impl UserDB {
+    pub async fn get(&self, name: &String) -> Result<Option<User>, Error> {
+        let query = format!("select * from user where name = '{}'", name);
+
+        let mut res = self.0.query(query).await?;
+        let user: Option<User> = res.take(0)?;
+
+        Ok(user)
+    }
+
+    pub async fn create(&self, name: String, password: String) -> Result<User, Error> {
+        if self.get(&name).await?.is_some() {
+            return Err(Error::UserExists);
         }
+
+        let user = User::hash(name, password)?;
+        let user: User = self.0.create("user").content(user).await?;
+
+        Ok(user)
     }
 
     pub async fn authenticate(&self, name: String, password: String) -> Result<User, Error> {
-        if name != "a" || password != "b" {
-            return Err(Error::WrongCredential);
+        if self.get(&name).await?.is_none() {
+            return Err(Error::UserNotFound);
         }
 
-        Ok(User {
-            id: ObjectId::new(),
-            name,
-            password,
-            created_at: DateTime::now(),
-        })
+        let query = format!("select * from user where name = '{}'", name);
+
+        let mut res = self.0.query(query).await?;
+        let user: Option<User> = res.take(0)?;
+        let user = user.ok_or(Error::UserNotFound)?;
+        user.verify(password)?;
+
+        Ok(user)
     }
 }

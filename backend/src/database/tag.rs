@@ -1,124 +1,99 @@
-use bson::{doc, oid::ObjectId};
-use futures::{StreamExt, TryStreamExt};
-use mongodb::{ClientSession, options::FindOptions};
+use futures::future::try_join_all;
+use serde::Deserialize;
+use surrealdb::{engine::remote::ws::Client, Surreal};
 
-use crate::{errors::Error, models::tag::Tag};
+use crate::{
+    errors::Error,
+    models::{image::Image, tag::Tag, tagresponse::TagResponse},
+};
+
+use super::Session;
 
 #[derive(Clone)]
-pub struct Tags {
-    collection: mongodb::Collection<Tag>,
-    client: mongodb::Client,
-}
+pub struct TagDB(pub Surreal<Client>);
 
-impl Tags {
-    pub fn new(db: &mongodb::Database, client: mongodb::Client) -> Tags {
-        Tags {
-            collection: db.collection::<Tag>("tags"),
-            client,
-        }
+impl TagDB {
+    pub async fn create(self, tag: &Tag) -> Result<Tag, Error> {
+        let tag: Tag = self.0.create("tag").content(tag).await?;
+        Ok(tag)
     }
 
-    pub async fn insert(&self, tag: &Tag) -> Result<(), Error> {
-        self.collection
-            .insert_one(tag, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
+    pub async fn get(&self, name: &String, category: &String) -> Result<Option<Tag>, Error> {
+        let mut res = self
+            .0
+            .query("select * from tag where name = $name and category = $category")
+            .bind(("name", name))
+            .bind(("category", category))
+            .await?;
 
-        Ok(())
+        Ok(res.take(0)?)
     }
-
-    pub async fn delete(&self, category: &String, name: &String) -> Result<(), Error> {
-        self.collection
-            .delete_one(doc! {"category": category, "name": name}, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
-
-        Ok(())
-    }
-
-    pub async fn get(&self, id: &ObjectId) -> Result<Tag, Error> {
-        self.collection
-            .find_one(doc! {"_id": id}, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?
-            .ok_or(Error::TagNotFound)
-    }
-
-    pub async fn find(&self, category: &String, name: &String) -> Result<Option<Tag>, Error> {
-        self.collection
-            .find_one(doc! {"category": category, "name": name}, None)
-            .await
-            .map_err(|_| Error::DatabaseError)
-    }
-
+    
     pub async fn search(&self, category: &String, name: &String) -> Result<Vec<Tag>, Error> {
-        let mut filter = doc! {};
+        let query = format!("select * from tag where category = /^{}/ and name = /^{}/;", category, name);
 
-        if !category.is_empty() {
-            filter.insert("category", doc! { "$regex": category });
+        let mut res = self
+            .0
+            .query(query)
+            .await?;
+
+        Ok(res.take(0)?)        
+    }
+
+    pub async fn convert(&self, tags: Vec<TagResponse>) -> Result<Vec<Tag>, Error> {
+        let tags = try_join_all(tags.iter().map(|t| self.get(&t.name, &t.category))).await?;
+        let tags = tags.into_iter().collect::<Option<Vec<Tag>>>();
+
+        tags.ok_or(Error::TagNotFound)
+    }
+
+    pub async fn from_image(&self, image: &Image) -> Result<Vec<Tag>, Error> {
+        let id = image.id.clone().ok_or(Error::ImageNotFound)?;
+
+        let mut res = self
+            .0
+            .query("select ->tagged->tag.* as tagged from $image")
+            .bind(("image", id))
+            .await?;
+
+        #[derive(Deserialize)]
+        struct Tags {
+            tagged: Vec<Tag>,
         }
 
-        if !name.is_empty() {
-            filter.insert("name", doc! { "$regex": name });
+        let tags: Option<Tags> = res.take(0)?;
+
+        match tags {
+            Some(tags) => Ok(tags.tagged),
+            None => Ok(vec![]),
         }
-
-        let options = FindOptions::builder().limit(10).build();
-
-        let x = self.collection
-            .find(filter, options)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
-
-        x.try_collect().await.map_err(|_| Error::DatabaseError)
     }
 
-    #[cfg(not(session))]
-    pub async fn increment(&self, id: &ObjectId) -> Result<(), Error> {
-        self.collection
-            .update_one(doc! {"_id": id }, doc! {"$inc": { "count": 1 } }, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
+    pub async fn delete(&self, tag: Tag) -> Result<(), Error> {
+        let tag = self
+            .get(&tag.name, &tag.category)
+            .await?
+            .ok_or(Error::TagNotFound)?;
+
+        let id = tag.id.ok_or(Error::TagNotFound)?;
+        let (_, id) = id.split_at(4);
+
+        self.0.delete(("tag", id)).await?;
 
         Ok(())
     }
 
-    #[cfg(session)]
-    pub async fn increment(&self, id: &ObjectId, session: &mut ClientSession) -> Result<(), Error> {
-        self.collection
-            .update_one_with_session(
-                doc! {"_id": id },
-                doc! {"$inc": { "count": 1 } },
-                None,
-                session,
-            )
-            .await
-            .map_err(|_| Error::DatabaseError)?;
+    pub fn update<'a>(
+        &self,
+        tag: &Tag,
+        offset: i32,
+        session: Session<'a>,
+    ) -> Result<Session<'a>, Error> {
+        let id = tag.id.clone().ok_or(Error::InvalidId)?;
 
-        Ok(())
-    }
+        let query = format!("update {} set count += {};", id, offset);
+        let s = session.query(query);
 
-    #[cfg(not(session))]
-    pub async fn decrement(&self, id: &ObjectId) -> Result<(), Error> {
-        self.collection
-            .update_one(doc! {"_id": id }, doc! {"$inc": { "count": -1 } }, None)
-            .await
-            .map_err(|_| Error::DatabaseError)?;
-
-        Ok(())
-    }
-
-    #[cfg(session)]
-    pub async fn decrement(&self, id: &ObjectId, session: &mut ClientSession) -> Result<(), Error> {
-        self.collection
-            .update_one_with_session(
-                doc! {"_id": id },
-                doc! {"$inc": { "count": -1 } },
-                None,
-                session,
-            )
-            .await
-            .map_err(|_| Error::DatabaseError)?;
-
-        Ok(())
+        Ok(s)
     }
 }

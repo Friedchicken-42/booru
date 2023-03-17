@@ -8,24 +8,48 @@ use crate::{
 };
 
 #[derive(Debug, Deserialize)]
-pub struct ApiUser {
+pub struct Login {
     pub name: String,
     pub password: String,
 }
 
 pub async fn login(
     State(db): State<Database>,
-    Json(user): Json<ApiUser>,
+    Json(user): Json<Login>,
 ) -> Result<Json<Token>, Error> {
-    let ApiUser { name, password } = user;
+    let Login { name, password } = user;
 
     if name.is_empty() || password.is_empty() {
         return Err(Error::MissingCredential);
     }
 
-    let user = db.user.authenticate(name.clone(), password).await?;
+    let user = db.user.authenticate(name, password).await?;
 
-    let claims = Claims::new(user.id.to_string());
+    let claims = Claims::new(user.name);
+    let token = claims.encode()?;
+
+    Ok(Json(token))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Signup {
+    pub name: String,
+    pub password: String,
+}
+
+pub async fn signup(
+    State(db): State<Database>,
+    Json(user): Json<Signup>,
+) -> Result<Json<Token>, Error> {
+    let Signup { name, password } = user;
+
+    if name.is_empty() || password.is_empty() {
+        return Err(Error::MissingCredential);
+    }
+
+    let user = db.user.create(name, password).await?;
+
+    let claims = Claims::new(user.name);
     let token = claims.encode()?;
 
     Ok(Json(token))

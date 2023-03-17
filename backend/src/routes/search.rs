@@ -1,17 +1,12 @@
 use axum::{extract::State, Json};
 use axum_macros::debug_handler;
-use futures::future::try_join_all;
 use serde::Deserialize;
-use uuid::Uuid;
 
 use crate::{
     database::Database,
     errors::Error,
     jwt::Claims,
-    models::{
-        image::ImageResponse,
-        tag::{Convert, TagResponse},
-    },
+    models::{tagresponse::TagResponse, imageresponse::ImageResponse},
 };
 
 #[derive(Debug, Deserialize)]
@@ -35,22 +30,15 @@ pub async fn image(
         query.include, query.exclude, query.previous
     );
 
-    let include = try_join_all(query.include.into_iter().map(|t| t.convert(&db))).await?;
-    let exclude = try_join_all(query.exclude.into_iter().map(|t| t.convert(&db))).await?;
-
+    let include = db.tag.convert(query.include).await?;
+    let exclude = db.tag.convert(query.exclude).await?;
     let previous = match query.previous {
-        Some(hash) => {
-            let id = Uuid::parse_str(&hash).map_err(|_| Error::InvalidId)?;
-            let image = db.image.get(&id).await?.ok_or(Error::ImageNotFound)?;
-            Some(image)
-        }
+        Some(hash) => Some(db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?),
         None => None,
     };
 
-    println!("{include:?} {exclude:?}");
-
     let images = db.image.search(include, exclude, previous).await?;
-    let images = try_join_all(images.into_iter().map(|i| i.convert(&db))).await?;
+    let images = images.into_iter().map(ImageResponse::new).collect(); 
 
     Ok(Json(images))
 }
@@ -67,10 +55,10 @@ pub async fn tag(
     _: Claims,
     State(db): State<Database>,
     Json(query): Json<SearchTag>,
-) -> Result<Json<Vec<TagResponse>>, Error> {
-
+    ) -> Result<Json<Vec<TagResponse>>, Error> {
     let tags = db.tag.search(&query.category, &query.name).await?;
-    let tags = try_join_all(tags.into_iter().map(|tag| tag.convert(&db))).await?;
+    let tags = tags.into_iter().map(TagResponse::new).collect();
+    // let tags = try_join_all(tags.into_iter().map(|tag| tag.convert(&db))).await?;
 
     Ok(Json(tags))
 }
