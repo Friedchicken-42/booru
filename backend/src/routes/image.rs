@@ -139,7 +139,6 @@ pub async fn post(
     println!("{:?}", image);
 
     let image = db.image.tagged(image).await?;
-
     Ok(ImageResponse::new(image))
 }
 
@@ -160,8 +159,10 @@ pub async fn update(
     let image = db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?;
     println!("image: {:?}", image);
 
-    let old_tags = db.tag.from_image(&image).await?;
+    // let old_tags = db.tag.from_image(&image).await?;
+    let old_tags = db.image.tagged(image.clone()).await?.tags;
     println!("old_tags: {:?}", old_tags);
+    // let tags = try_join_all(tags.into_iter().map(|tag| tag.convert(&db))).await?;
 
     let tags = try_join_all(tags.iter().map(|t| db.tag.get(&t.name, &t.category))).await?;
     println!("tags: {:?}", tags);

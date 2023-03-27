@@ -22,7 +22,7 @@ impl ImageResponse {
     pub fn new(image: TaggedImage) -> Self {
         let url = format!("http://localhost:4000/{}", image.hash);
         let tags = image.tags.into_iter().map(TagResponse::new).collect();
-        let user = image.user[0].clone();
+        let user = image.user;
 
         Self {
             hash: image.hash,

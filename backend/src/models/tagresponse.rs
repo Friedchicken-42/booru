@@ -14,6 +14,8 @@ pub struct TagResponse {
     pub description: Option<String>,
     #[serde(default)]
     pub count: u32,
+    #[serde(default)]
+    pub user: String,
 }
 
 impl TagResponse {
@@ -23,6 +25,7 @@ impl TagResponse {
             category: tag.category,
             description: None,
             count: tag.count,
+            user: tag.user[0].clone(),
         }
     }
 
