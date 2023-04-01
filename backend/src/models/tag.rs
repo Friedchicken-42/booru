@@ -23,3 +23,12 @@ impl Tag {
         }
     }
 }
+
+impl ToString for Tag {
+    fn to_string(&self) -> String {
+        match &self.id {
+            Some(x) => x.clone(),
+            None => unreachable!(),
+        }
+    }
+}

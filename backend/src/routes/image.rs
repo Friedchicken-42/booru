@@ -30,7 +30,7 @@ async fn upload(image: &Image, data: Bytes) -> Result<(), Error> {
         .multipart(multipart)
         .send()
         .await
-        .map_err(|_| Error::WrongCredential)?
+        .map_err(|_| Error::Upload)?
         .error_for_status()
         .map_err(|_| Error::Upload)?;
 
@@ -159,10 +159,8 @@ pub async fn update(
     let image = db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?;
     println!("image: {:?}", image);
 
-    // let old_tags = db.tag.from_image(&image).await?;
     let old_tags = db.image.tagged(image.clone()).await?.tags;
     println!("old_tags: {:?}", old_tags);
-    // let tags = try_join_all(tags.into_iter().map(|tag| tag.convert(&db))).await?;
 
     let tags = try_join_all(tags.iter().map(|t| db.tag.get(&t.name, &t.category))).await?;
     println!("tags: {:?}", tags);
@@ -193,7 +191,6 @@ pub async fn update(
     let response = session.query(CommitStatement).await?;
     response.check()?; 
 
-    println!("asdf");
     let image = db.image.tagged(image).await?;
 
     Ok(ImageResponse::new(image))

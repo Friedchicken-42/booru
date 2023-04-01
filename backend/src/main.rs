@@ -3,6 +3,7 @@ mod errors;
 mod jwt;
 mod models;
 mod routes;
+mod pattern;
 
 use axum::{
     routing::{post, put},

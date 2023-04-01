@@ -49,13 +49,6 @@ impl TagDB {
         self.get(&tag.name, &tag.category).await?.ok_or(Error::TagNotFound)
     }
 
-    pub async fn convert(&self, tags: Vec<TagResponse>) -> Result<Vec<Tag>, Error> {
-        let tags = try_join_all(tags.iter().map(|t| self.get(&t.name, &t.category))).await?;
-        let tags = tags.into_iter().collect::<Option<Vec<Tag>>>();
-
-        tags.ok_or(Error::TagNotFound)
-    }
-
     pub async fn delete(&self, tag: Tag) -> Result<(), Error> {
         let tag = self
             .get(&tag.name, &tag.category)

@@ -20,12 +20,15 @@ pub struct TagResponse {
 
 impl TagResponse {
     pub fn new(tag: Tag) -> Self {
+        println!("{:?}", tag);
         Self {
             name: tag.name,
             category: tag.category,
             description: None,
             count: tag.count,
-            user: tag.user[0].clone(),
+            // TODO: fix user
+            // user: tag.user[0].clone(),
+            user: "User".to_string(),
         }
     }
 

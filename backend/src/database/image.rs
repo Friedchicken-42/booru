@@ -4,7 +4,7 @@ use surrealdb::{engine::remote::ws::Client, Surreal};
 
 use crate::{
     errors::Error,
-    models::{image::Image, tag::Tag, taggedimage::TaggedImage, user::User},
+    models::{image::Image, tag::Tag, taggedimage::TaggedImage, user::User}, pattern::Pattern,
 };
 
 use super::Session;
@@ -37,20 +37,16 @@ impl ImageDB {
 
     pub async fn search(
         &self,
-        include: Vec<Tag>,
-        exclude: Vec<Tag>,
+        pattern: Option<Pattern<Tag>>,
         previous: Option<Image>,
     ) -> Result<Vec<TaggedImage>, Error> {
-        let include = include
-            .into_iter()
-            .map(|t| t.id)
-            .collect::<Option<Vec<String>>>()
-            .ok_or(Error::TagNotFound)?;
+        // TODO: add limit
+        let mut query = String::from("select * from (select *, ->tagged->tag.*.id as tag from image)");
 
-        let query = format!(
-            "select * from image where {:?} allinside ->tagged->tag.*.id",
-            include
-        );
+        if let Some(p) = pattern {
+            query = format!("{} where {}", query, p.serialize("tag"));
+        }
+
         let mut res = self.0.query(query).await?;
         let images: Vec<Image> = res.take(0)?;
 
@@ -79,12 +75,22 @@ impl ImageDB {
 
         let mut res = self
             .0
-            .query("select <-upload<-user.name as name from $image")
+            .query("select <-upload<-user.name as names from $image")
             .bind(("image", id))
             .await?;
 
-        let user: Option<String> = res.take(0)?;
-        let user = user.ok_or(Error::UserNotFound)?;
+        #[derive(Deserialize)]
+        struct Users {
+            names: Vec<String>,
+        }
+
+        let users: Option<Users> = res.take(0)?;
+        let users = users.ok_or(Error::UserNotFound)?;
+        if users.names.len() != 1 {
+            return Err(Error::DatabaseError);
+        }
+
+        let user = users.names[0].clone();
 
         Ok(TaggedImage::new(image, tags, user))
     }

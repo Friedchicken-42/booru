@@ -31,7 +31,6 @@ pub async fn create(
     let user = db.user.get(&name).await?.ok_or(Error::UserNotFound)?;
 
     let tag = db.tag.create(&tag).await?;
-    println!("a");
 
     match db.tag.user(&tag, &user).await {
         Ok(t) => Ok(TagResponse::new(t)),
