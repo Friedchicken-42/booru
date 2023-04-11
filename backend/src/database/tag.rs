@@ -1,25 +1,26 @@
-use futures::future::try_join_all;
 use surrealdb::{engine::remote::ws::Client, Surreal};
 
 use crate::{
     errors::Error,
-    models::{tag::Tag, tagresponse::TagResponse, user::User},
+    models::{tag::Tag, user::User},
 };
 
-use super::Session;
+use super::{Database, Session};
 
-#[derive(Clone)]
-pub struct TagDB(pub Surreal<Client>);
+pub struct TagDB<'a> {
+    pub client: &'a Surreal<Client>,
+    pub db: &'a Database,
+}
 
-impl TagDB {
+impl<'a> TagDB<'a> {
     pub async fn create(&self, tag: &Tag) -> Result<Tag, Error> {
-        let tag: Tag = self.0.create("tag").content(tag).await?;
+        let tag: Tag = self.client.create("tag").content(tag).await?;
         Ok(tag)
     }
 
     pub async fn get(&self, name: &String, category: &String) -> Result<Option<Tag>, Error> {
         let mut res = self
-            .0
+            .client
             .query("select *, <-upload<-user.name as user from tag where name = $name and category = $category")
             .bind(("name", name))
             .bind(("category", category))
@@ -27,16 +28,16 @@ impl TagDB {
 
         Ok(res.take(0)?)
     }
-    
+
     pub async fn search(&self, category: &String, name: &String) -> Result<Vec<Tag>, Error> {
-        let query = format!("select * from tag where category = /^{}/ and name = /^{}/;", category, name);
+        let query = format!(
+            "select * from tag where category = /^{}/ and name = /^{}/;",
+            category, name
+        );
 
-        let mut res = self
-            .0
-            .query(query)
-            .await?;
+        let mut res = self.client.query(query).await?;
 
-        Ok(res.take(0)?)        
+        Ok(res.take(0)?)
     }
 
     pub async fn user(&self, tag: &Tag, user: &User) -> Result<Tag, Error> {
@@ -44,9 +45,11 @@ impl TagDB {
         let user_id = user.id.clone().ok_or(Error::InvalidId)?;
 
         let query = format!("relate {}->upload->{};", user_id, tag_id);
-        self.0.query(query).await?;
+        self.client.query(query).await?;
 
-        self.get(&tag.name, &tag.category).await?.ok_or(Error::TagNotFound)
+        self.get(&tag.name, &tag.category)
+            .await?
+            .ok_or(Error::TagNotFound)
     }
 
     pub async fn delete(&self, tag: Tag) -> Result<(), Error> {
@@ -58,17 +61,17 @@ impl TagDB {
         let id = tag.id.ok_or(Error::TagNotFound)?;
         let (_, id) = id.split_at(4);
 
-        self.0.delete(("tag", id)).await?;
+        self.client.delete(("tag", id)).await?;
 
         Ok(())
     }
 
-    pub fn update<'a>(
+    pub fn update<'b>(
         &self,
         tag: &Tag,
         offset: i32,
-        session: Session<'a>,
-    ) -> Result<Session<'a>, Error> {
+        session: Session<'b>,
+    ) -> Result<Session<'b>, Error> {
         let id = tag.id.clone().ok_or(Error::InvalidId)?;
 
         let query = format!("update {} set count += {};", id, offset);

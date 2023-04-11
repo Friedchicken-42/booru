@@ -23,7 +23,7 @@ pub async fn login(
         return Err(Error::MissingCredential);
     }
 
-    let user = db.user.authenticate(name, password).await?;
+    let user = db.user().authenticate(name, password).await?;
 
     let claims = Claims::new(user.name);
     let token = claims.encode()?;
@@ -47,7 +47,7 @@ pub async fn signup(
         return Err(Error::MissingCredential);
     }
 
-    let user = db.user.create(name, password).await?;
+    let user = db.user().create(name, password).await?;
 
     let claims = Claims::new(user.name);
     let token = claims.encode()?;

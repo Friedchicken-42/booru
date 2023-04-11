@@ -4,18 +4,21 @@ use surrealdb::{engine::remote::ws::Client, Surreal};
 
 use crate::{
     errors::Error,
-    models::{image::Image, tag::Tag, taggedimage::TaggedImage, user::User}, pattern::Pattern,
+    models::{image::Image, tag::Tag, taggedimage::TaggedImage, user::User},
+    pattern::Pattern,
 };
 
-use super::Session;
+use super::{Database, Session};
 
-#[derive(Clone)]
-pub struct ImageDB(pub Surreal<Client>);
+pub struct ImageDB<'a> {
+    pub client: &'a Surreal<Client>,
+    pub db: &'a Database,
+}
 
-impl ImageDB {
+impl<'a> ImageDB<'a> {
     pub async fn create(&self, image: &Image) -> Result<Image, Error> {
         let image: Image = self
-            .0
+            .client
             .create(("image", image.hash.clone()))
             .content(image)
             .await?;
@@ -24,13 +27,13 @@ impl ImageDB {
     }
 
     pub async fn get(&self, hash: &String) -> Result<Option<Image>, Error> {
-        Ok(self.0.select(("image", hash.to_owned())).await?)
+        Ok(self.client.select(("image", hash.to_owned())).await?)
     }
 
     pub async fn delete(&self, image: Image) -> Result<(), Error> {
         let id = image.id.ok_or(Error::ImageNotFound)?;
         let (_, id) = id.split_at(6);
-        self.0.delete(("image", id)).await?;
+        self.client.delete(("image", id)).await?;
 
         Ok(())
     }
@@ -41,13 +44,14 @@ impl ImageDB {
         previous: Option<Image>,
     ) -> Result<Vec<TaggedImage>, Error> {
         // TODO: add limit
-        let mut query = String::from("select * from (select *, ->tagged->tag.*.id as tag from image)");
+        let mut query =
+            String::from("select * from (select *, ->tagged->tag.*.id as tag from image)");
 
         if let Some(p) = pattern {
             query = format!("{} where {}", query, p.serialize("tag"));
         }
 
-        let mut res = self.0.query(query).await?;
+        let mut res = self.client.query(query).await?;
         let images: Vec<Image> = res.take(0)?;
 
         try_join_all(images.into_iter().map(|image| self.tagged(image))).await
@@ -57,7 +61,7 @@ impl ImageDB {
         let id = image.id.clone().ok_or(Error::ImageNotFound)?;
 
         let mut res = self
-            .0
+            .client
             .query("select ->tagged->tag.* as tagged from $image")
             .bind(("image", id.clone()))
             .await?;
@@ -74,7 +78,7 @@ impl ImageDB {
         };
 
         let mut res = self
-            .0
+            .client
             .query("select <-upload<-user.name as names from $image")
             .bind(("image", id))
             .await?;
@@ -100,17 +104,17 @@ impl ImageDB {
         let user_id = user.id.clone().ok_or(Error::InvalidId)?;
 
         let query = format!("relate {}->upload->{};", user_id, image_id);
-        self.0.query(query).await?;
+        self.client.query(query).await?;
 
         Ok(())
     }
 
-    pub fn tag<'a>(
+    pub fn tag<'b>(
         &self,
         image: &Image,
         tag: &Tag,
-        session: Session<'a>,
-    ) -> Result<Session<'a>, Error> {
+        session: Session<'b>,
+    ) -> Result<Session<'b>, Error> {
         let image_id = image.id.clone().ok_or(Error::InvalidId)?;
         let tag_id = tag.id.clone().ok_or(Error::InvalidId)?;
 
@@ -120,12 +124,12 @@ impl ImageDB {
         Ok(s)
     }
 
-    pub fn untag<'a>(
+    pub fn untag<'b>(
         &self,
         image: &Image,
         tag: &Tag,
-        session: Session<'a>,
-    ) -> Result<Session<'a>, Error> {
+        session: Session<'b>,
+    ) -> Result<Session<'b>, Error> {
         let image_id = image.id.clone().ok_or(Error::InvalidId)?;
         let tag_id = tag.id.clone().ok_or(Error::InvalidId)?;
 

@@ -16,7 +16,7 @@ use crate::{
     database::Database,
     errors::Error,
     jwt::Claims,
-    models::{image::Image, tag::Tag, tagresponse::TagResponse, imageresponse::ImageResponse},
+    models::{image::Image, imageresponse::ImageResponse, tag::Tag, tagresponse::TagResponse},
 };
 
 async fn upload(image: &Image, data: Bytes) -> Result<(), Error> {
@@ -78,19 +78,19 @@ pub async fn create(
 
         let image = Image::new(&data, content_type);
 
-        if db.image.get(&image.hash).await?.is_some() {
+        if db.image().get(&image.hash).await?.is_some() {
             return Err(Error::ImageExists);
         }
 
         upload(&image, data).await?;
         let name = claims.sub;
 
-        let user = db.user.get(&name).await?.ok_or(Error::UserNotFound)?;
+        let user = db.user().get(&name).await?.ok_or(Error::UserNotFound)?;
 
-        let image = db.image.create(&image).await?;
+        let image = db.image().create(&image).await?;
 
-        if db.image.user(&image, &user).await.is_err() {
-            db.image.delete(image).await?;
+        if db.image().user(&image, &user).await.is_err() {
+            db.image().delete(image).await?;
             return Err(Error::InvalidId);
         }
 
@@ -112,9 +112,9 @@ pub async fn delete(
 ) -> Result<String, Error> {
     let hash = query.hash;
 
-    let image = db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?;
+    let image = db.image().get(&hash).await?.ok_or(Error::ImageNotFound)?;
 
-    db.image.delete(image).await?;
+    db.image().delete(image).await?;
 
     Ok(hash)
 }
@@ -131,14 +131,14 @@ pub async fn post(
     Json(query): Json<Post>,
 ) -> Result<ImageResponse, Error> {
     let image = db
-        .image
+        .image()
         .get(&query.hash)
         .await?
         .ok_or(Error::ImageNotFound)?;
 
     println!("{:?}", image);
 
-    let image = db.image.tagged(image).await?;
+    let image = db.image().tagged(image).await?;
     Ok(ImageResponse::new(image))
 }
 
@@ -156,13 +156,14 @@ pub async fn update(
 ) -> Result<ImageResponse, Error> {
     let Update { hash, tags } = query;
 
-    let image = db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?;
+    let image = db.image().get(&hash).await?.ok_or(Error::ImageNotFound)?;
     println!("image: {:?}", image);
 
-    let old_tags = db.image.tagged(image.clone()).await?.tags;
+    let old_tags = db.image().tagged(image.clone()).await?.tags;
     println!("old_tags: {:?}", old_tags);
 
-    let tags = try_join_all(tags.iter().map(|t| db.tag.get(&t.name, &t.category))).await?;
+    let tagdb = db.tag();
+    let tags = try_join_all(tags.iter().map(|t| tagdb.get(&t.name, &t.category))).await?;
     println!("tags: {:?}", tags);
 
     let new_tags = tags
@@ -176,22 +177,22 @@ pub async fn update(
 
     for old in &old_tags {
         if !new_tags.contains(old) {
-            session = db.image.untag(&image, old, session)?;
-            session = db.tag.update(old, -1, session)?;
+            session = db.image().untag(&image, old, session)?;
+            session = db.tag().update(old, -1, session)?;
         }
     }
-    
+
     for new in &new_tags {
         if !old_tags.contains(new) {
-            session = db.image.tag(&image, new, session)?;
-            session = db.tag.update(new, 1, session)?;
+            session = db.image().tag(&image, new, session)?;
+            session = db.tag().update(new, 1, session)?;
         }
     }
 
     let response = session.query(CommitStatement).await?;
-    response.check()?; 
+    response.check()?;
 
-    let image = db.image.tagged(image).await?;
+    let image = db.image().tagged(image).await?;
 
     Ok(ImageResponse::new(image))
 }

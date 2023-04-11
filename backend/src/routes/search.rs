@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use axum::{extract::State, Json};
 use axum_macros::debug_handler;
@@ -8,7 +8,7 @@ use crate::{
     database::Database,
     errors::Error,
     jwt::Claims,
-    models::{imageresponse::ImageResponse, tag::Tag, tagresponse::TagResponse},
+    models::{imageresponse::ImageResponse, tagresponse::TagResponse},
     pattern::Pattern,
 };
 
@@ -40,7 +40,7 @@ pub async fn image(
             let inside = Arc::clone(&dbarc);
             async move {
                 inside
-                    .tag
+                    .tag()
                     .get(&tag.name, &tag.category)
                     .await
                     .map_err(|_| ())?
@@ -53,11 +53,11 @@ pub async fn image(
     }
 
     let previous = match query.previous {
-        Some(hash) => Some(db.image.get(&hash).await?.ok_or(Error::ImageNotFound)?),
+        Some(hash) => Some(db.image().get(&hash).await?.ok_or(Error::ImageNotFound)?),
         None => None,
     };
 
-    let images = db.image.search(pattern, previous).await?;
+    let images = db.image().search(pattern, previous).await?;
     let images = images.into_iter().map(ImageResponse::new).collect();
 
     Ok(Json(images))
@@ -76,7 +76,7 @@ pub async fn tag(
     State(db): State<Database>,
     Json(query): Json<SearchTag>,
 ) -> Result<Json<Vec<TagResponse>>, Error> {
-    let tags = db.tag.search(&query.category, &query.name).await?;
+    let tags = db.tag().search(&query.category, &query.name).await?;
     let tags = tags.into_iter().map(TagResponse::new).collect();
 
     Ok(Json(tags))

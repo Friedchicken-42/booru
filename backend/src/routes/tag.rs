@@ -22,20 +22,20 @@ pub async fn create(
 ) -> Result<TagResponse, Error> {
     let tag = Tag::new(query.name, query.category, query.description);
 
-    if db.tag.get(&tag.name, &tag.category).await?.is_some() {
+    if db.tag().get(&tag.name, &tag.category).await?.is_some() {
         return Err(Error::TagExists);
     }
 
     let name = claims.sub;
 
-    let user = db.user.get(&name).await?.ok_or(Error::UserNotFound)?;
+    let user = db.user().get(&name).await?.ok_or(Error::UserNotFound)?;
 
-    let tag = db.tag.create(&tag).await?;
+    let tag = db.tag().create(&tag).await?;
 
-    match db.tag.user(&tag, &user).await {
+    match db.tag().user(&tag, &user).await {
         Ok(t) => Ok(TagResponse::new(t)),
         Err(_) => {
-            db.tag.delete(tag).await?;
+            db.tag().delete(tag).await?;
             return Err(Error::InvalidId);
         }
     }
@@ -53,12 +53,12 @@ pub async fn delete(
     Json(query): Json<Delete>,
 ) -> Result<(), Error> {
     let tag = db
-        .tag
+        .tag()
         .get(&query.name, &query.category)
         .await?
         .ok_or(Error::TagNotFound)?;
 
-    db.tag.delete(tag).await?;
+    db.tag().delete(tag).await?;
 
     Ok(())
 }
@@ -75,7 +75,7 @@ pub async fn post(
     Json(query): Json<Post>,
 ) -> Result<TagResponse, Error> {
     let tag = db
-        .tag
+        .tag()
         .get(&query.name, &query.category)
         .await?
         .ok_or(Error::TagNotFound)?;

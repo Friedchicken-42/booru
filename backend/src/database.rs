@@ -1,7 +1,8 @@
 use surrealdb::{
     engine::remote::ws::{Client, Ws},
+    method::Query,
     opt::auth::Root,
-    Surreal, method::Query,
+    Surreal,
 };
 
 use crate::errors::Error;
@@ -17,9 +18,6 @@ pub type Session<'a> = Query<'a, Client>;
 #[derive(Clone)]
 pub struct Database {
     pub client: Surreal<Client>,
-    pub user: UserDB,
-    pub image: ImageDB,
-    pub tag: TagDB,
 }
 
 impl Database {
@@ -28,12 +26,7 @@ impl Database {
             .await
             .map_err(|_| Error::DatabaseConnection)?;
 
-        Ok(Self {
-            client: client.clone(),
-            user: UserDB(client.clone()),
-            image: ImageDB(client.clone()),
-            tag: TagDB(client.clone()),
-        })
+        Ok(Self { client })
     }
 
     pub async fn signin(self, username: &str, password: &str) -> Result<Self, Error> {
@@ -53,5 +46,26 @@ impl Database {
             .map_err(|_| Error::DatabaseConnection)?;
 
         Ok(self)
+    }
+
+    pub fn image(&self) -> ImageDB {
+        ImageDB {
+            client: &self.client,
+            db: &self,
+        }
+    }
+
+    pub fn tag(&self) -> TagDB {
+        TagDB {
+            client: &self.client,
+            db: &self,
+        }
+    }
+
+    pub fn user(&self) -> UserDB {
+        UserDB {
+            client: &self.client,
+            db: &self,
+        }
     }
 }
