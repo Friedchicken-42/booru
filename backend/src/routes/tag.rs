@@ -32,7 +32,7 @@ pub async fn create(
 
     let tag = db.tag().create(&tag).await?;
 
-    match db.tag().user(&tag, &user).await {
+    match db.tag().user_set(&tag, &user).await {
         Ok(t) => Ok(TagResponse::new(t)),
         Err(_) => {
             db.tag().delete(tag).await?;

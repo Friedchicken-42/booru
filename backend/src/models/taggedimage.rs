@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::{tag::Tag, image::Image};
+use super::{tag::Tag, image::Image, user::User};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaggedImage {
@@ -12,12 +12,12 @@ pub struct TaggedImage {
 }
 
 impl TaggedImage {
-    pub fn new(image: Image, tags: Vec<Tag>, user: String) -> Self {
+    pub fn new(image: Image, tags: Vec<Tag>, user: User) -> Self {
         Self {
             hash: image.hash,
             created_at: image.created_at,
             tags,
-            user,
+            user: user.name,
         }
     }
 }

@@ -1,5 +1,4 @@
 use futures::future::try_join_all;
-use serde::Deserialize;
 use surrealdb::{engine::remote::ws::Client, Surreal};
 
 use crate::{
@@ -58,43 +57,8 @@ impl<'a> ImageDB<'a> {
     }
 
     pub async fn tagged(&self, image: Image) -> Result<TaggedImage, Error> {
-        let id = image.id.clone().ok_or(Error::ImageNotFound)?;
-
-        let mut res = self
-            .client
-            .query("select ->tagged->tag.* as tagged from $image")
-            .bind(("image", id.clone()))
-            .await?;
-
-        #[derive(Deserialize)]
-        struct Tags {
-            tagged: Vec<Tag>,
-        }
-
-        let tags: Option<Tags> = res.take(0)?;
-        let tags = match tags {
-            Some(tags) => tags.tagged,
-            None => vec![],
-        };
-
-        let mut res = self
-            .client
-            .query("select <-upload<-user.name as names from $image")
-            .bind(("image", id))
-            .await?;
-
-        #[derive(Deserialize)]
-        struct Users {
-            names: Vec<String>,
-        }
-
-        let users: Option<Users> = res.take(0)?;
-        let users = users.ok_or(Error::UserNotFound)?;
-        if users.names.len() != 1 {
-            return Err(Error::DatabaseError);
-        }
-
-        let user = users.names[0].clone();
+        let tags = self.db.tag().from_image(&image).await?;
+        let user = self.db.user().from_image(&image).await?;
 
         Ok(TaggedImage::new(image, tags, user))
     }

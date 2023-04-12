@@ -14,7 +14,7 @@ const SALT_SIZE: usize = 64;
 const CREDENTIAL_SIZE: usize = digest::SHA512_OUTPUT_LEN;
 
 #[serde_with::serde_as]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     #[serde(skip_serializing)]
     pub id: Option<String>,

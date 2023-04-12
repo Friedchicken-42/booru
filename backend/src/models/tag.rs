@@ -8,7 +8,8 @@ pub struct Tag {
     pub category: String,
     pub description: String,
     pub count: u32,
-    pub user: Vec<String>,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub user: String,
 }
 
 impl Tag {
@@ -19,7 +20,7 @@ impl Tag {
             category,
             description,
             count: 0,
-            user: vec![],
+            user: String::new(),
         }
     }
 }

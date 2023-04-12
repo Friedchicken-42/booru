@@ -136,8 +136,6 @@ pub async fn post(
         .await?
         .ok_or(Error::ImageNotFound)?;
 
-    println!("{:?}", image);
-
     let image = db.image().tagged(image).await?;
     Ok(ImageResponse::new(image))
 }
@@ -157,21 +155,16 @@ pub async fn update(
     let Update { hash, tags } = query;
 
     let image = db.image().get(&hash).await?.ok_or(Error::ImageNotFound)?;
-    println!("image: {:?}", image);
 
     let old_tags = db.image().tagged(image.clone()).await?.tags;
-    println!("old_tags: {:?}", old_tags);
 
     let tagdb = db.tag();
     let tags = try_join_all(tags.iter().map(|t| tagdb.get(&t.name, &t.category))).await?;
-    println!("tags: {:?}", tags);
 
     let new_tags = tags
         .into_iter()
         .collect::<Option<Vec<Tag>>>()
         .ok_or(Error::DatabaseError)?;
-
-    println!("new_tags: {:?}", new_tags);
 
     let mut session = db.client.query(BeginStatement);
 

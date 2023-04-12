@@ -1,8 +1,10 @@
+use futures::future::try_join_all;
+use serde::Deserialize;
 use surrealdb::{engine::remote::ws::Client, Surreal};
 
 use crate::{
     errors::Error,
-    models::{tag::Tag, user::User},
+    models::{tag::Tag, user::User, image::Image},
 };
 
 use super::{Database, Session};
@@ -36,20 +38,24 @@ impl<'a> TagDB<'a> {
         );
 
         let mut res = self.client.query(query).await?;
+        let tags: Vec<Tag> = res.take(0)?;
+        let tags = try_join_all(tags.into_iter().map(|t| self.user(t))).await?; 
 
-        Ok(res.take(0)?)
+        Ok(tags)
     }
 
-    pub async fn user(&self, tag: &Tag, user: &User) -> Result<Tag, Error> {
+    pub async fn user_set(&self, tag: &Tag, user: &User) -> Result<Tag, Error> {
         let tag_id = tag.id.clone().ok_or(Error::InvalidId)?;
         let user_id = user.id.clone().ok_or(Error::InvalidId)?;
 
         let query = format!("relate {}->upload->{};", user_id, tag_id);
         self.client.query(query).await?;
 
-        self.get(&tag.name, &tag.category)
+        let tag = self.get(&tag.name, &tag.category)
             .await?
-            .ok_or(Error::TagNotFound)
+            .ok_or(Error::TagNotFound)?;
+
+        self.user(tag).await
     }
 
     pub async fn delete(&self, tag: Tag) -> Result<(), Error> {
@@ -64,6 +70,40 @@ impl<'a> TagDB<'a> {
         self.client.delete(("tag", id)).await?;
 
         Ok(())
+    }
+
+    pub async fn from_image(&self, image: &Image) -> Result<Vec<Tag>, Error> {
+        let id = image.id.clone().ok_or(Error::InvalidId)?;
+
+        let mut res = self
+            .client
+            .query("select ->tagged->tag.* as tagged from $image")
+            .bind(("image", id))
+            .await?;
+
+        #[derive(Deserialize)]
+        struct Tags {
+            tagged: Vec<Tag>,
+        }
+
+        let tags: Option<Tags> = res.take(0)?;
+        let tags = match tags {
+            Some(t) => t.tagged,
+            None => vec![],
+        };
+
+        let tags = try_join_all(tags.into_iter().map(|t| self.user(t))).await?;
+
+        Ok(tags)
+    }
+
+    pub async fn user(&self, tag: Tag) -> Result<Tag, Error> {
+        let dbuser = self.db.user();
+
+        let user = dbuser.from_tag(&tag).await?;
+        let tag = Tag { user: user.name, ..tag };
+
+        Ok(tag)
     }
 
     pub fn update<'b>(
