@@ -3,7 +3,7 @@ use surrealdb::{engine::remote::ws::Client, Surreal};
 
 use crate::{
     errors::Error,
-    models::{image::Image, tag::Tag, taggedimage::TaggedImage, user::User},
+    models::{image::Image, tag::Tag, user::User},
     pattern::Pattern,
 };
 
@@ -41,7 +41,7 @@ impl<'a> ImageDB<'a> {
         &self,
         pattern: Option<Pattern<Tag>>,
         previous: Option<Image>,
-    ) -> Result<Vec<TaggedImage>, Error> {
+    ) -> Result<Vec<Image>, Error> {
         // TODO: add limit
         let mut query =
             String::from("select * from (select *, ->tagged->tag.*.id as tag from image)");
@@ -56,11 +56,11 @@ impl<'a> ImageDB<'a> {
         try_join_all(images.into_iter().map(|image| self.tagged(image))).await
     }
 
-    pub async fn tagged(&self, image: Image) -> Result<TaggedImage, Error> {
+    pub async fn tagged(&self, image: Image) -> Result<Image, Error> {
         let tags = self.db.tag().from_image(&image).await?;
         let user = self.db.user().from_image(&image).await?;
 
-        Ok(TaggedImage::new(image, tags, user))
+        Ok(Image::tagged(image, tags, user))
     }
 
     pub async fn user(&self, image: &Image, user: &User) -> Result<(), Error> {

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::errors::Error;
 
-use super::{taggedimage::TaggedImage, tagresponse::TagResponse};
+use super::{image::Image, tagresponse::TagResponse};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ImageResponse {
@@ -19,17 +19,16 @@ pub struct ImageResponse {
 }
 
 impl ImageResponse {
-    pub fn new(image: TaggedImage) -> Self {
+    pub fn new(image: Image) -> Self {
         let url = format!("http://localhost:4000/{}", image.hash);
         let tags = image.tags.into_iter().map(TagResponse::new).collect();
-        let user = image.user;
 
         Self {
             hash: image.hash,
             url,
             created_at: image.created_at,
             tags,
-            user,
+            user: image.user,
         }
     }
 }
