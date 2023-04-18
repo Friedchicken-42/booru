@@ -34,7 +34,7 @@ impl<'a> TagDB<'a> {
     pub async fn search(&self, category: &String, name: &String) -> Result<Vec<Tag>, Error> {
         let limit = 32;
         let query = format!(
-            "select * from tag where category = /^{}/ and name = /^{}/ limit {};",
+            "select * from tag where category = /^{}/ and name = /^{}/ order by count desc limit {};",
             category, name, limit
         );
 

@@ -64,7 +64,7 @@ impl<'a> ImageDB<'a> {
             query = format!("{} where {}", query, c);
         }
 
-        query = format!("{} limit {}", query, limit);
+        query = format!("{} order by created_at desc limit {}", query, limit);
 
         let mut res = self.client.query(query).await?;
         let images: Vec<Image> = res.take(0)?;
