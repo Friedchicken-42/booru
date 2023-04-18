@@ -42,13 +42,29 @@ impl<'a> ImageDB<'a> {
         pattern: Option<Pattern<Tag>>,
         previous: Option<Image>,
     ) -> Result<Vec<Image>, Error> {
-        // TODO: add limit
+        let limit = 20;
         let mut query =
             String::from("select * from (select *, ->tagged->tag.*.id as tag from image)");
 
+        let mut wheres = vec![];
         if let Some(p) = pattern {
-            query = format!("{} where {}", query, p.serialize("tag"));
+            wheres.push(p.serialize("tag"));
         }
+
+        if let Some(p) = previous {
+            wheres.push(format!("created_at < \"{}\"", p.created_at));
+        }
+
+        let clause = wheres
+            .iter()
+            .map(|w| format!("({})", w))
+            .reduce(|acc, s| format!("{} && {}", acc, s));
+
+        if let Some(c) = clause {
+            query = format!("{} where {}", query, c);
+        }
+
+        query = format!("{} limit {}", query, limit);
 
         let mut res = self.client.query(query).await?;
         let images: Vec<Image> = res.take(0)?;

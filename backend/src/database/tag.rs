@@ -32,9 +32,10 @@ impl<'a> TagDB<'a> {
     }
 
     pub async fn search(&self, category: &String, name: &String) -> Result<Vec<Tag>, Error> {
+        let limit = 32;
         let query = format!(
-            "select * from tag where category = /^{}/ and name = /^{}/;",
-            category, name
+            "select * from tag where category = /^{}/ and name = /^{}/ limit {};",
+            category, name, limit
         );
 
         let mut res = self.client.query(query).await?;
