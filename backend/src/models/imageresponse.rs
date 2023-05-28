@@ -13,6 +13,7 @@ use super::{image::Image, tagresponse::TagResponse};
 pub struct ImageResponse {
     pub hash: String,
     pub url: String,
+    pub thumb: String,
     pub created_at: DateTime<Utc>,
     pub tags: Vec<TagResponse>,
     pub user: String,
@@ -21,11 +22,13 @@ pub struct ImageResponse {
 impl ImageResponse {
     pub fn new(image: Image) -> Self {
         let url = format!("http://localhost:4000/{}", image.hash);
+        let thumb = format!("http://localhost:4000/thumb/{}", image.hash);
         let tags = image.tags.into_iter().map(TagResponse::new).collect();
 
         Self {
             hash: image.hash,
             url,
+            thumb,
             created_at: image.created_at,
             tags,
             user: image.user,

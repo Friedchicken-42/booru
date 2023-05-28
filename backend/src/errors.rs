@@ -21,6 +21,7 @@ pub enum Error {
     Serialize,
     InvalidId,
     NotImplemented,
+    WrongType,
 }
 
 impl IntoResponse for Error {
@@ -44,6 +45,7 @@ impl IntoResponse for Error {
             Error::Serialize => (StatusCode::INTERNAL_SERVER_ERROR, "Serialize"),
             Error::InvalidId => (StatusCode::BAD_REQUEST, "Invalid Id"),
             Error::NotImplemented => (StatusCode::INTERNAL_SERVER_ERROR, "Not Implemented"),
+            Error::WrongType => (StatusCode::BAD_REQUEST, "Wrong Type"),
         };
 
         let body = Json(json!({

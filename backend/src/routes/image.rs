@@ -21,7 +21,10 @@ use crate::{
 
 async fn upload(image: &Image, data: Bytes) -> Result<(), Error> {
     let hash = image.hash.clone();
-    let part = Part::bytes(data.to_vec()).file_name(hash);
+    let part = Part::bytes(data.to_vec())
+        .file_name(hash)
+        .mime_str(&image.content_type)
+        .map_err(|_| Error::WrongType)?;
 
     let multipart = Form::new().part("file", part);
 
