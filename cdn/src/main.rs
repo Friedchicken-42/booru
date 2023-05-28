@@ -1,21 +1,27 @@
-use std::{env, fs, net::SocketAddr, path::PathBuf};
+use std::{
+    env,
+    io::{BufReader, Cursor},
+    net::SocketAddr,
+    path::PathBuf, fs,
+};
 
 use axum::{
-    body::Bytes,
-    extract::{multipart::Field, Multipart, Path},
-    http::{StatusCode, HeaderMap, header},
+    extract::{Multipart, Path},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router, Server,
 };
 use dotenv::dotenv;
 use serde_json::json;
+use thumbnailer::{create_thumbnails, Thumbnail, ThumbnailSize};
 
 #[derive(Debug)]
 enum Error {
     Server,
     WrongFilename,
     WrongField,
+    WrongMime,
     Write,
     Read,
     Exists,
@@ -28,6 +34,7 @@ impl IntoResponse for Error {
             Error::Server => (StatusCode::INTERNAL_SERVER_ERROR, "Server Start"),
             Error::WrongFilename => (StatusCode::BAD_REQUEST, "Wrong Filename"),
             Error::WrongField => (StatusCode::BAD_REQUEST, "Wrong Field"),
+            Error::WrongMime => (StatusCode::BAD_REQUEST, "Wrong Mime"),
             Error::Write => (StatusCode::INTERNAL_SERVER_ERROR, "Write File"),
             Error::Read => (StatusCode::BAD_REQUEST, "Read File"),
             Error::Exists => (StatusCode::BAD_REQUEST, "File already exists"),
@@ -55,10 +62,10 @@ fn split_string(s: String) -> (String, String, String, String) {
     )
 }
 
-fn generate_path(s: String) -> (PathBuf, String) {
+fn generate_path(root: &str, s: String) -> (PathBuf, String) {
     let (a, b, c, name) = split_string(s);
 
-    let assets = match env::var("ASSETS") {
+    let assets = match env::var(root) {
         Ok(p) => p,
         Err(_) => "./".to_string(),
     };
@@ -68,8 +75,8 @@ fn generate_path(s: String) -> (PathBuf, String) {
     (dir, name)
 }
 
-fn save(filename: String, data: Bytes) -> Result<(), Error> {
-    let (dir, name) = generate_path(filename);
+fn save(root: &str, filename: String, data: &Vec<u8>) -> Result<(), Error> {
+    let (dir, name) = generate_path(root, filename);
     let path = dir.join(name);
 
     if path.exists() {
@@ -83,46 +90,43 @@ fn save(filename: String, data: Bytes) -> Result<(), Error> {
     Ok(())
 }
 
-async fn parse_field(field: Field<'_>) -> Option<(String, String, Bytes)> {
-    let name = match field.name() {
-        Some(n) => n.to_string(),
-        None => return None,
-    };
+fn save_thumb(filename: String, thumb: Thumbnail) -> Result<(), Error> {
+    let mut buf = Cursor::new(Vec::new());
+    thumb.write_jpeg(&mut buf, 85).map_err(|_| Error::Write)?;
+    let data = buf.into_inner();
 
-    let filename = match field.file_name() {
-        Some(n) => n.to_string(),
-        None => return None,
-    };
-
-    let data = match field.bytes().await {
-        Ok(n) => n,
-        Err(_) => return None,
-    };
-
-    Some((name, filename, data))
+    save("THUMBS", filename, &data)
 }
 
 async fn add(mut multipart: Multipart) -> Result<(), Error> {
     while let Ok(Some(field)) = multipart.next_field().await {
-        let Some((name, filename, data)) = parse_field(field).await else {
-            continue;
-        };
+        let name = field.name().ok_or(Error::WrongField)?;
 
         if name != "file" {
             return Err(Error::WrongFilename);
         }
 
-        let file = PathBuf::from(filename);
+        let filename = field.file_name().ok_or(Error::WrongField)?.to_string();
 
-        let Some(string) = file.file_name() else {
-            return Err(Error::WrongFilename);
-        };
-
-        if string.len() != 32 {
+        if filename.len() != 32 {
             return Err(Error::WrongFilename);
         }
 
-        save(string.to_string_lossy().to_string(), data)?;
+        let content_type = field.content_type().ok_or(Error::WrongField)?;
+        let content_type: mime::Mime = content_type.parse().map_err(|_| Error::WrongMime)?;
+
+        let data = field.bytes().await.map_err(|_| Error::WrongField)?;
+
+        save("ASSETS", filename.clone(), &data.to_vec())?;
+
+        let cursor = Cursor::new(data);
+        let reader = BufReader::new(cursor);
+        let thumb = create_thumbnails(reader, content_type, [ThumbnailSize::Medium])
+            .map_err(|_| Error::Write)?
+            .pop()
+            .ok_or(Error::Write)?;
+
+        save_thumb(filename, thumb)?;
 
         return Ok(());
     }
@@ -130,12 +134,12 @@ async fn add(mut multipart: Multipart) -> Result<(), Error> {
     Err(Error::WrongField)
 }
 
-async fn image(Path(filename): Path<String>) -> Result<Response, Error> {
+async fn thumb(Path(filename): Path<String>) -> Result<Response, Error> {
     if filename.len() != 32 {
         return Err(Error::WrongFilename);
     }
 
-    let (dir, name) = generate_path(filename);
+    let (dir, name) = generate_path("THUMBS", filename);
     let path = dir.join(name);
 
     if !path.exists() {
@@ -153,13 +157,37 @@ async fn image(Path(filename): Path<String>) -> Result<Response, Error> {
     Ok((headers, data).into_response())
 }
 
+async fn image(Path(filename): Path<String>) -> Result<Response, Error> {
+    if filename.len() != 32 {
+        return Err(Error::WrongFilename);
+    }
+
+    let (dir, name) = generate_path("ASSETS", filename);
+    let path = dir.join(name);
+
+    if !path.exists() {
+        return Err(Error::NotFound);
+    }
+
+    let data = fs::read(path).map_err(|_| Error::Read)?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "image/jpeg".parse().expect("cannot parse string"),
+    );
+
+    Ok((headers, data).into_response())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     dotenv().ok();
 
     let app = Router::new()
         .route("/", post(add))
-        .route("/:id", get(image));
+        .route("/:id", get(image))
+        .route("/thumb/:id", get(thumb));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 4000));
 

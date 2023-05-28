@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 axum = { version = "0.6.1", features = ["multipart"] }
 dotenv = "0.15.0"
+mime = "0.3.17"
 serde = "1.0.152"
 serde_json = "1.0.91"
+thumbnailer = "0.4.0"
 tokio = { version = "1.23.0", features = ["full"] }
