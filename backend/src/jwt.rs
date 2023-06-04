@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, sync::OnceLock};
 
 use axum::{
     async_trait,
@@ -9,7 +9,6 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
 use crate::errors::Error;
@@ -19,14 +18,7 @@ struct Keys {
     decoding: DecodingKey,
 }
 
-static KEYS: Lazy<Keys> = Lazy::new(|| {
-    let secret = env::var("JWT_SECRET").expect("JsonWebToken Secret not found");
-
-    Keys {
-        encoding: EncodingKey::from_secret(secret.as_bytes()),
-        decoding: DecodingKey::from_secret(secret.as_bytes()),
-    }
-});
+static KEYS: OnceLock<Keys> = OnceLock::new();
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -66,9 +58,22 @@ impl Claims {
         Claims { sub, exp }
     }
 
+    fn keys() -> Keys {
+        let secret = env::var("JWT_SECRET").expect("JsonWebToken Secret not found");
+
+        Keys {
+            encoding: EncodingKey::from_secret(secret.as_bytes()),
+            decoding: DecodingKey::from_secret(secret.as_bytes()),
+        }
+    }
+
     pub fn encode(&self) -> Result<Token, Error> {
-        let access_token =
-            encode(&Header::default(), self, &KEYS.encoding).map_err(|_| Error::InvalidToken)?;
+        let access_token = encode(
+            &Header::default(),
+            self,
+            &KEYS.get_or_init(Self::keys).encoding,
+        )
+        .map_err(|_| Error::InvalidToken)?;
 
         Ok(Token {
             access_token,
@@ -78,9 +83,13 @@ impl Claims {
     }
 
     pub fn decode(token: &str) -> Result<Claims, Error> {
-        let claims = decode::<Claims>(token, &KEYS.decoding, &Validation::default())
-            .map_err(|_| Error::InvalidToken)?
-            .claims;
+        let claims = decode::<Claims>(
+            token,
+            &KEYS.get_or_init(Self::keys).decoding,
+            &Validation::default(),
+        )
+        .map_err(|_| Error::InvalidToken)?
+        .claims;
 
         Ok(claims)
     }
